@@ -149,7 +149,7 @@ add_custom_target(test_executable ALL
 
 add_custom_target(run_test
         COMMAND ${CMAKE_CURRENT_BINARY_DIR}/scanner_parser_test
-        ${CMAKE_CURRENT_SOURCE_DIR}/test1.c
+        test/test1.c
         COMMAND ${CMAKE_CURRENT_BINARY_DIR}/test
         DEPENDS scanner_parser_test test_executable
         COMMENT "Running scanner_parser_test and ./test"
