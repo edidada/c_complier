@@ -11,7 +11,7 @@ else()
     message(WARNING "NASM not found. Assembly files will be skipped.")
 endif()
 # 设置 C++ 标准
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 启用调试信息
@@ -73,20 +73,6 @@ add_custom_command(
         COMMENT "Generating parser.tab.c/h with bison"
 )
 
-# Sed 修改 parser.tab.h
-add_custom_command(
-        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
-        COMMAND ${SED_EXECUTABLE} -i
-        "1i#include \\\"./abstract_syntax_tree/AstNode.h\\\""
-        "2i#include \\\"./symbol_table/symbol.h\\\""
-        "3i#include \\\"./intermidiate_code/interCode.h\\\""
-        "4i#include \\\"./asm/AsmGenerate.h\\\""
-        ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h
-        COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
-        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.c
-        COMMENT "Inserting includes into parser.tab.h"
-)
-
 # 强制依赖：确保 sed 在编译前执行
 add_custom_target(modify_parser_header ALL
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
@@ -116,7 +102,13 @@ add_executable(scanner_parser_test
         ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.c
         ${CMAKE_CURRENT_BINARY_DIR}/scanner.lex.c
 )
-
+# ⭐️ 核心修改：强制 Bison/Flex 输出文件使用 C++ 编译 ⭐️
+# 这解决了 C 文件编译时找不到 C++ 标准库 (iostream/string) 的问题
+set_source_files_properties(
+        ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.c
+        ${CMAKE_CURRENT_BINARY_DIR}/scanner.lex.c
+        PROPERTIES LANGUAGE CXX
+)
 add_dependencies(scanner_parser_test modify_parser_header)
 
 target_include_directories(scanner_parser_test PRIVATE
