@@ -16,7 +16,8 @@ enum class AstNodeType
     POINTER,
     ARRAY,
     ADDRESS,
-    BODY
+    BODY,
+    defFunc
 };
 
 class AbstractAstNode {

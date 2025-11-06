@@ -14,9 +14,9 @@ FuncSymbol::FuncSymbol(AbstractAstNode* func) {
     while (t) {
         DefVarASTNode* var = (DefVarASTNode*)t;
         this->typeList.push_back(var->getSymbolType());
-        if (var->getSymbolType() == symbolType::integer) {
+        if (var->getSymbolType() == SymbolType::integer) {
             this->keyName += "_i";
-        } else if (var->getSymbolType() == symbolType::pointer) {
+        } else if (var->getSymbolType() == SymbolType::pointer) {
             this->keyName += "_p";
         }
         totalArgOffset += 4;
