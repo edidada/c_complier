@@ -30,15 +30,8 @@ Symbol* AsmGenerate::getoffsetofarray(Symbol* arg)
     result=new Symbol(firstname,SymbolType::var);
     result->setSymOffset(total_offset);
     return result;
-
-   
-
-
-
-
-
-
 }
+
 std::string AsmCode::transRegister(asmRegister reg) {
     if (reg == asmRegister::eax) return ASM_EAX;
     else if (reg == asmRegister::ebx) return ASM_EBX;
@@ -215,8 +208,6 @@ AsmGenerate::AsmGenerate(std::vector<QuadItem*> quadlist, SymbolTable* roottable
     this->rootTable = roottable;
     //this->funcTable = funcTable;
     this->preSetLabel();
-   
-    
     eax = 0;
     ebx = 0;
     ecx = 0;

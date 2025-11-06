@@ -78,27 +78,10 @@ add_custom_target(modify_parser_header ALL
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
 )
 
-# ==================== 编译 .cpp 文件 ====================
-
-# 编译为对象文件
-set(OBJ_FILES "")
-foreach(src ${SOURCES})
-    get_filename_component(name ${src} NAME_WE)
-    set(obj ${CMAKE_CURRENT_BINARY_DIR}/${name}.o)
-    add_custom_command(
-            OUTPUT ${obj}
-            COMMAND ${CMAKE_CXX_COMPILER} -c -g ${CMAKE_CURRENT_SOURCE_DIR}/${src} -o ${obj}
-            -I${CMAKE_CURRENT_SOURCE_DIR}
-            DEPENDS ${src} modify_parser_header
-            COMMENT "Compiling ${src}"
-    )
-    list(APPEND OBJ_FILES ${obj})
-endforeach()
-
 # ==================== 主可执行文件 ====================
 
 add_executable(scanner_parser_test
-        ${OBJ_FILES}
+        ${SOURCES}
         ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.c
         ${CMAKE_CURRENT_BINARY_DIR}/scanner.lex.c
 )
@@ -141,7 +124,7 @@ add_custom_target(test_executable ALL
 
 add_custom_target(run_test
         COMMAND ${CMAKE_CURRENT_BINARY_DIR}/scanner_parser_test
-        test/test1.c
+        test_code/test1.c
         COMMAND ${CMAKE_CURRENT_BINARY_DIR}/test
         DEPENDS scanner_parser_test test_executable
         COMMENT "Running scanner_parser_test and ./test"
