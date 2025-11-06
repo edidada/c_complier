@@ -38,7 +38,6 @@ union Arg{
    Symbol* var;
 };
 
-
 class QuadItem {
 public: 
     Arg result;

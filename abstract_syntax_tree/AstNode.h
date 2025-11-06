@@ -19,15 +19,12 @@ enum class AstNodeType
     BODY
 };
 
-
 class AbstractAstNode {
 private:
-    
     AbstractAstNode *parent;
     AbstractAstNode *firstChild;
     AbstractAstNode *nextSibling;
     int depth;
-    
 
 public:
     std::string content;

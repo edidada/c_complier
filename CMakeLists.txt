@@ -157,3 +157,6 @@ add_custom_target(distclean
         COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target clean
         COMMENT "Deep clean: remove generated files"
 )
+
+add_executable(symbol_table_test symbol_table/test_symbol_table.cpp symbol_table/symbol.cpp
+        abstract_syntax_tree/AstNode.cpp)

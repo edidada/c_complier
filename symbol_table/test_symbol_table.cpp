@@ -1,5 +1,4 @@
 #include "symbol.h"
-#include "symbol.cpp"
 #include <iostream>
 #include <string>
 using namespace std;
