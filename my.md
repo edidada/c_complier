@@ -91,3 +91,162 @@ Body_Gen Def_Single_Var
 
 Process finished with exit code 132
 ```
+
+
+是的，你的理解完全正确！FuncSymbol 确实是一个类似于符号表的概念，它是编译器中用于管理函数符号信息的关键数据结构。
+
+让我详细解释一下：
+
+FuncSymbol 与符号表的关系
+
+1. 符号表
+
+符号表是编译器中的一个全局数据结构，用于存储程序中所有标识符的信息，包括：
+• 变量名、函数名、类名等
+
+• 类型信息
+
+• 作用域信息
+
+• 内存地址或偏移量
+
+2. FuncSymbol
+
+FuncSymbol 通常是符号表中专门用于管理函数信息的一个条目或子系统。
+// 简化的概念示例
+class SymbolTable {
+private:
+std::unordered_map<std::string, Symbol*> symbols;
+
+public:
+void addFunction(const std::string& name, FuncSymbol* funcSym);
+FuncSymbol* lookupFunction(const std::string& name);
+};
+
+class FuncSymbol : public Symbol {
+private:
+std::string functionName;
+Type* returnType;
+std::vector<VarSymbol*> parameters;
+int stackSize;
+// ... 其他函数特有信息
+};
+
+
+FuncSymbol 通常包含的信息
+
+一个完整的 FuncSymbol 可能会包含：
+
+基本标识信息
+
+std::string name;          // 函数名
+int lineNumber;            // 定义所在行
+std::string sourceFile;    // 源文件名
+
+
+类型信息
+
+Type* returnType;                  // 返回值类型
+std::vector<Type*> paramTypes;     // 参数类型列表
+bool isVariadic;                   // 是否可变参数
+
+
+作用域信息
+
+Scope* functionScope;             // 函数内部作用域
+SymbolTable* localSymbols;        // 局部变量符号表
+
+
+代码生成相关信息
+
+int stackFrameSize;               // 栈帧大小
+int parameterOffset;              // 参数偏移
+std::string labelName;            // 汇编标签名
+
+
+在实际编译器中的角色
+
+语法分析阶段
+
+// 当解析到函数定义时
+FuncSymbol* funcSym = new FuncSymbol("functionName");
+funcSym->setReturnType(intType);
+funcSym->addParameter("param1", intType);
+symbolTable.addSymbol(funcSym);
+
+
+语义分析阶段
+
+// 检查函数调用是否合法
+FuncSymbol* callee = symbolTable.lookupFunction(funcName);
+if (!callee) {
+// 错误：函数未定义
+}
+if (!checkParameters(callee, actualParams)) {
+// 错误：参数不匹配
+}
+
+
+代码生成阶段
+
+// 生成函数入口代码
+void generateFunctionPrologue(FuncSymbol* funcSym) {
+emit("push ebp");
+emit("mov ebp, esp");
+emit("sub esp, " + std::to_string(funcSym->getStackSize()));
+}
+
+
+具体实现示例
+
+这是一个简化的 FuncSymbol 实现：
+class FuncSymbol : public Symbol {
+public:
+enum Linkage {
+EXTERNAL,    // 外部链接
+INTERNAL,    // 内部链接
+STATIC       // 静态链接
+};
+
+private:
+Type* returnType;
+std::vector<std::pair<std::string, Type*>> parameters;
+Linkage linkage;
+bool isDefined;
+int frameSize;
+
+public:
+    FuncSymbol(const std::string& name, Type* retType, Linkage link = EXTERNAL)
+        : Symbol(name, SYMBOL_FUNCTION), returnType(retType), linkage(link), 
+          isDefined(false), frameSize(0) {}
+    
+    void addParameter(const std::string& name, Type* type) {
+        parameters.push_back({name, type});
+    }
+    
+    bool matchesCall(const std::vector<Type*>& argTypes) const {
+        if (parameters.size() != argTypes.size()) return false;
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            if (!parameters[i].second->isCompatibleWith(argTypes[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    // ... 其他方法
+};
+
+
+总结
+
+FuncSymbol 是符号表系统中专门用于表示函数信息的组件，它：
+• ✅ 继承自通用的 Symbol 基类
+
+• ✅ 包含函数特有的信息（参数、返回类型等）
+
+• ✅ 在编译的各个阶段被使用
+
+• ✅ 帮助实现类型检查、重载解析、代码生成等功能
+
+所以你的直觉是对的 - FuncSymbol 确实是符号表概念在函数管理方面的具体体现！
