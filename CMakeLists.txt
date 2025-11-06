@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
-#project(Compiler LANGUAGES C CXX ASM_NASM)
-project(Compiler LANGUAGES C CXX)
+project(c_complier LANGUAGES C CXX ASM_NASM)
+#project(c_complier LANGUAGES C CXX)
 
 # 只有找到 nasm 才启用 ASM_NASM
 find_program(NASM_EXECUTABLE nasm)
