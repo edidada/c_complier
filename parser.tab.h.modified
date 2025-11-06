@@ -44,7 +44,7 @@
 #include "symbol_table/symbol.h"
 #include "intermidiate_code/interCode.h"
 #include "asm/AsmCode.h"
-#include "asm/AsmGenerate.cpp"
+#include "asm/AsmGenerate.h"
 #ifndef YYDEBUG
 # define YYDEBUG 0
 #endif
