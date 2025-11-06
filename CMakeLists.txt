@@ -72,7 +72,19 @@ add_custom_command(
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/parser.y
         COMMENT "Generating parser.tab.c/h with bison"
 )
-
+# Sed 修改 parser.tab.h
+add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
+        COMMAND ${SED_EXECUTABLE} -i
+        "1i#include \\\"./abstract_syntax_tree/AstNode.h\\\""
+        "2i#include \\\"./symbol_table/symbol.h\\\""
+        "3i#include \\\"./intermidiate_code/interCode.h\\\""
+        "4i#include \\\"./asm/AsmGenerate.h\\\""
+        ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h
+        COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.c
+        COMMENT "Inserting includes into parser.tab.h"
+)
 # 强制依赖：确保 sed 在编译前执行
 add_custom_target(modify_parser_header ALL
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/parser.tab.h.modified
