@@ -242,13 +242,9 @@ public:
 
 FuncSymbol 是符号表系统中专门用于表示函数信息的组件，它：
 • 继承自通用的 Symbol 基类
-
 • 包含函数特有的信息（参数、返回类型等）
-
 • 在编译的各个阶段被使用
-
 • 帮助实现类型检查、重载解析、代码生成等功能
-
 所以你的直觉是对的 - FuncSymbol 确实是符号表概念在函数管理方面的具体体现！
 
 ```shell
@@ -266,3 +262,6 @@ FAILED: [code=1] test_func_symbol
 /usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:19: undefined reference to `DefVarASTNode::getSymbolType()'
 /usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:21: undefined reference to `DefVarASTNode::getSymbolType()'
 ```
+
+parser.y
+里面有main函数

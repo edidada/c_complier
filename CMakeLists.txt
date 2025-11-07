@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 启用调试信息
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_C_FLAGS_DEBUG "-g")
 
 # 查找工具
@@ -162,6 +162,11 @@ add_executable(test_symbol_table
         symbol_table/test_symbol_table.cpp
         symbol_table/symbol.cpp
         abstract_syntax_tree/AstNode.cpp
+)
+
+add_executable(symbol_table_testcode
+    symbol_table/symbol_table_testcode.cpp
+    symbol_table/symbol.cpp
 )
 
 add_executable(test_func_symbol
