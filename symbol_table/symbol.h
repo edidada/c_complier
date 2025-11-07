@@ -76,7 +76,13 @@ public:
     inline int getSymbolNumber(){return this->symbolNumber;}
     inline void setParentTable(SymbolTable* parentTable){this->parentTable = parentTable;}
     inline int getOffset(){return this->total_offset;}
-    inline int setOffset(int new_offset){this->total_offset = new_offset; }
+    // inline int setOffset(int new_offset){this->total_offset = new_offset; }
+    // 或者返回设置前的偏移量：
+    inline int setOffset(int new_offset){
+        int old_offset = this->total_offset;
+        this->total_offset = new_offset;
+        return old_offset;
+    }
     SymbolTable* addChildTable(bool isFunc);
     void addNextSiblingTable(SymbolTable* ns);
     Symbol* findSymbolGlobally(const std::string name);
