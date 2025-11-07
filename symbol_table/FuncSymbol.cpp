@@ -1,5 +1,7 @@
 #include "./FuncSymbol.h"
 
+#include "../abstract_syntax_tree/DefFunASTNode.h"
+
 int FuncTable::num = 0;
 
 FuncSymbol::FuncSymbol(AbstractAstNode* func) {

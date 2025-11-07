@@ -250,3 +250,19 @@ FuncSymbol 是符号表系统中专门用于表示函数信息的组件，它：
 • 帮助实现类型检查、重载解析、代码生成等功能
 
 所以你的直觉是对的 - FuncSymbol 确实是符号表概念在函数管理方面的具体体现！
+
+```shell
+[3/3] Linking CXX executable test_func_symbol
+FAILED: [code=1] test_func_symbol 
+: && /usr/bin/c++ -g  CMakeFiles/test_func_symbol.dir/symbol_table/test_func_symbol.cpp.o CMakeFiles/test_func_symbol.dir/symbol_table/symbol.cpp.o CMakeFiles/test_func_symbol.dir/abstract_syntax_tree/AstNode.cpp.o CMakeFiles/test_func_symbol.dir/abstract_syntax_tree/DefFunASTNode.cpp.o CMakeFiles/test_func_symbol.dir/symbol_table/test_symbol_table.cpp.o CMakeFiles/test_func_symbol.dir/symbol_table/FuncSymbol.cpp.o -o test_func_symbol   && :
+/usr/bin/ld: CMakeFiles/test_func_symbol.dir/symbol_table/test_symbol_table.cpp.o: in function `std::__new_allocator<char>::~__new_allocator()':
+/mnt/d/develops/git/github/c/c_complier/symbol_table/test_symbol_table.cpp:6: multiple definition of `main'; CMakeFiles/test_func_symbol.dir/symbol_table/test_func_symbol.cpp.o:/mnt/d/develops/git/github/c/c_complier/symbol_table/test_func_symbol.cpp:6: first defined here
+/usr/bin/ld: CMakeFiles/test_func_symbol.dir/symbol_table/FuncSymbol.cpp.o: in function `FuncSymbol::FuncSymbol(AbstractAstNode*)':
+/mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:8: undefined reference to `AbstractAstNode::getAstNodeType()'
+/usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:13: undefined reference to `AbstractAstNode::getContent[abi:cxx11]()'
+/usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:14: undefined reference to `AbstractAstNode::getContent[abi:cxx11]()'
+/usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:15: undefined reference to `DefFunASTNode::getArgList()'
+/usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:18: undefined reference to `DefVarASTNode::getSymbolType()'
+/usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:19: undefined reference to `DefVarASTNode::getSymbolType()'
+/usr/bin/ld: /mnt/d/develops/git/github/c/c_complier/symbol_table/FuncSymbol.cpp:21: undefined reference to `DefVarASTNode::getSymbolType()'
+```
