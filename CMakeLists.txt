@@ -163,6 +163,5 @@ add_executable(test_symbol_table symbol_table/test_symbol_table.cpp symbol_table
 add_executable(test_func_symbol symbol_table/test_func_symbol.cpp symbol_table/symbol.cpp
         abstract_syntax_tree/AstNode.cpp
         abstract_syntax_tree/DefFunASTNode.cpp
-        symbol_table/test_symbol_table.cpp
         symbol_table/FuncSymbol.cpp
 )
