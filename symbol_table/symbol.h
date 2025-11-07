@@ -47,7 +47,6 @@ public:
     inline bool getIsUsed(){return this->isUsed ;}
 };
 
-
 // a symbolTable correspond to a scop; function-scope and other-wrapped-in-scopes;
 class SymbolTable {
 public:
@@ -68,7 +67,6 @@ public:
     //find in its 
     Symbol* findSymbolLocally(const std::string name);
     bool addSymbol(Symbol* symbol);
-
 
     SymbolTable(bool isFunc);
     SymbolTable(bool isFunc, SymbolTable* parentTable);
