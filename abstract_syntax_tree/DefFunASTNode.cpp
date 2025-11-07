@@ -25,4 +25,7 @@ AbstractAstNode* DefFunASTNode::getArgList() {
 // DefVarASTNode 实现
 DefVarASTNode::DefVarASTNode() {
 }
+SymbolType && DefVarASTNode::getSymbolType() {
+    return SymbolType::function_name;
+}
 
