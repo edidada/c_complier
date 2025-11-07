@@ -21,10 +21,10 @@ Symbol::Symbol(std::string name, SymbolType type, int width, std::string init_va
 
 SymbolTable:: SymbolTable(bool isFunc){
     this->isFunctionTable = isFunc;
-    this->firstChildTable = NULL;
-    this->nextSiblingTable = NULL;
-    this->parentTable = NULL;
-    this->baseTable = NULL;
+    this->firstChildTable = nullptr;
+    this->nextSiblingTable = nullptr;
+    this->parentTable = nullptr;
+    this->baseTable = nullptr;
     this->total_offset = 0;
     if(isFunc){
         symbolArray = new std::vector<Symbol* >();
@@ -33,8 +33,8 @@ SymbolTable:: SymbolTable(bool isFunc){
 }
 SymbolTable:: SymbolTable(bool isFunc, SymbolTable* parent){
     this->isFunctionTable = isFunc;
-    this->firstChildTable = NULL;
-    this->nextSiblingTable = NULL;
+    this->firstChildTable = nullptr;
+    this->nextSiblingTable = nullptr;
     this->parentTable = parent;
     this->total_offset = 0;
     SymbolTable* temp = this;
@@ -55,12 +55,11 @@ Symbol* SymbolTable:: findSymbolLocally(const std::string name){
     if(iter != this->SymbolMap.end()){
         return iter->second;
     }
-    else 
-        return NULL;
+    return nullptr;
 }
 
 bool SymbolTable:: addSymbol(Symbol* symbol){
-    if(this->findSymbolLocally(symbol->getIDName()) == NULL){
+    if(this->findSymbolLocally(symbol->getIDName()) == nullptr){
         this->SymbolMap[symbol->getIDName()] = symbol;
         this->symbolNumber ++;
         return true;
@@ -70,25 +69,24 @@ bool SymbolTable:: addSymbol(Symbol* symbol){
 
 Symbol* SymbolTable:: findSymbolGlobally(std::string name){
     SymbolTable* temp = this;
-    while(temp != NULL){
+    while(temp != nullptr){
         Symbol* result = temp->findSymbolLocally(name);
-        if(result == NULL){
+        if(result == nullptr){
             temp = temp->parentTable;
         }else return result;
     }
     std::cout<<"\033[31m Error: Undefined ID: \033[0m"<<name<<std::endl;
     exit(1);
-    return NULL;
 }
 
 SymbolTable* SymbolTable:: addChildTable(bool isFunc){
     SymbolTable* child = new SymbolTable(isFunc);
     child->setParentTable(this);
-    if (this->firstChildTable == NULL){
+    if (this->firstChildTable == nullptr){
         this->firstChildTable = child;
     }else {
         SymbolTable* temp = this->firstChildTable;
-        while(temp->nextSiblingTable != NULL){
+        while(temp->nextSiblingTable != nullptr){
             temp = temp->nextSiblingTable;
         }
         temp->addNextSiblingTable(child);

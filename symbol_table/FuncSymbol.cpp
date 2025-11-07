@@ -69,5 +69,5 @@ FuncSymbol* FuncTable::findFunction(std::string keyName) {
     std::unordered_map<std::string, FuncSymbol*>::iterator iter;
     iter = this->funcHashTable.find(keyName);
     if (iter != this->funcHashTable.end()) return iter->second;
-    else return NULL;
+    else return nullptr;
 }

@@ -2,17 +2,17 @@
 #include <stack>
 
 AbstractAstNode:: AbstractAstNode(){
-    this->parent = NULL;
-    this->firstChild = NULL;
-    this->nextSibling = NULL;
+    this->parent = nullptr;
+    this->firstChild = nullptr;
+    this->nextSibling = nullptr;
     this->content = "Null Node";
     this->depth = 0;
 }
 
 AbstractAstNode:: AbstractAstNode(AstNodeType nodeType, char* content){
-    this->parent = NULL;
-    this->firstChild = NULL;
-    this->nextSibling = NULL;
+    this->parent = nullptr;
+    this->firstChild = nullptr;
+    this->nextSibling = nullptr;
     this->content = content;
     this->nodeType = nodeType;
     this->depth = 0;
@@ -31,7 +31,7 @@ AbstractAstNode* AbstractAstNode:: getNextSibling(){
 }
 // AbstractAstNode* AbstractAstNode:: getLastSiblingNode(){
 //     AbstractAstNode* t = this;
-//     while (t->nextSibling != NULL)
+//     while (t->nextSibling != nullptr)
 //     {
 //         t = t->nextSibling;
 //     }
@@ -105,11 +105,11 @@ void AbstractAstNode:: setDepth(int newDepth){
 
 // addFirstChild 和 addNextSibling 负责调好指针关系；depth的更新全部交给updateSubAstDepth
 void AbstractAstNode:: addFirstChild(AbstractAstNode* node){ 
-    if(node != NULL) {
+    if(node != nullptr) {
         this->firstChild = node;
         node->parent = this;
         AbstractAstNode* sibling = node->nextSibling;
-        while(sibling != NULL){
+        while(sibling != nullptr){
             sibling->parent = this;
             sibling = sibling->nextSibling;
         }
@@ -119,7 +119,7 @@ void AbstractAstNode:: addFirstChild(AbstractAstNode* node){
 }
 
 void AbstractAstNode:: addNextSibling(AbstractAstNode* node) {
-    if(node != NULL){
+    if(node != nullptr){
         this->nextSibling = node;
         node->parent = this->parent;
         updateSubAstDepth(node);
@@ -137,7 +137,7 @@ void AbstractAstNode:: printNodeInfo() {
     int i = 0;
     AbstractAstNode* father = this->parent;
     while(i < depth){
-        if (father->nextSibling == NULL){
+        if (father->nextSibling == nullptr){
             father = father->parent;
             i++;
         }
@@ -155,7 +155,7 @@ void AbstractAstNode:: printNodeInfo() {
 }
 
 void updateSubAstDepth(AbstractAstNode* subRoot){
-    if (subRoot == NULL) return;
+    if (subRoot == nullptr) return;
     subRoot->setDepth(subRoot->getParent()->getDepth()+1);
     AbstractAstNode* sibling = subRoot->getNextSibling();
     updateSubAstDepth(sibling);
@@ -171,15 +171,15 @@ void printAst(AbstractAstNode* Root){
     while(!nodeStack.empty()){
         AbstractAstNode* node = nodeStack.top();
         AbstractAstNode* child = node->getFirstChild();
-        if(child != NULL && !child->isVisited){
+        if(child != nullptr && !child->isVisited){
             nodeStack.push(child);
             child->isVisited = true;
             child->printNodeInfo();
         }
-        else if (child == NULL || child->isVisited){
+        else if (child == nullptr || child->isVisited){
             nodeStack.pop();
             AbstractAstNode* sibling = node->getNextSibling();
-            if (sibling != NULL) {
+            if (sibling != nullptr) {
                 nodeStack.push(sibling);
                 sibling->isVisited = true;
                 sibling->printNodeInfo();
