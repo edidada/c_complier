@@ -227,3 +227,9 @@ add_test(NAME lex_suite COMMAND bash
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_lex_test.sh
         $<TARGET_FILE:scanner_parser_test>
         ${CMAKE_CURRENT_SOURCE_DIR}/test_lex)
+
+# ==================== CTest 语法测试 (T2) ====================
+add_test(NAME parse_suite COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_parse_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_parse)

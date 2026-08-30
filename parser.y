@@ -10,8 +10,10 @@
 #include "./asm/AsmGenerate.h"
 extern char *yytext;
 extern int yylex();
-extern void yyerror(char* s);
+extern void yyerror(const char* s);
 extern FILE * yyin;
+extern int yylineno;
+int syntax_error_count = 0; /* 语法错误计数（超限终止） */
 AbstractAstNode* root;
 std::stack<SymbolTable*> SymbolTableList;
 %}
@@ -42,6 +44,7 @@ std::stack<SymbolTable*> SymbolTableList;
 // %token <str> INT
 // %token <str> VOID
 %nonassoc LOWER_THAN_ELSE
+%define parse.error verbose
 // %token <str> RETURN
 
 
@@ -79,7 +82,7 @@ Program:
     BlockList{
         root = new AbstractAstNode(AstNodeType::ROOT,"Program");
         root->addFirstChild($1);
-        printAst(root);
+        if (syntax_error_count == 0) printAst(root);
     }
   ;
 //a program is one or more blocks
@@ -126,6 +129,12 @@ Block:
         node->addFirstChild($1);
         $1->addNextSibling($2);
         $$ = node;
+    }
+    /*全局层错误恢复：丢弃到分号，继续分析后续块*/
+  | error SEMI{
+    // printf("block->error SEMI (recover) \n");
+        $$ = NULL;
+        yyerrok;
     }
   ;
 //ok
@@ -471,6 +480,40 @@ Stmt:
       $$ = node;
 
   }
+  /* ===== 错误恢复规则（T2.2）：报错后丢弃到同步点继续分析 ===== */
+  | WHILE '(' error ')' Stmt{
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"While_Recover");
+        node->addFirstChild($5);
+        $$ = node;
+        yyerrok;
+    }
+  | IF '(' error ')' Stmt %prec LOWER_THAN_ELSE{
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"If_Recover");
+        node->addFirstChild($5);
+        $$ = node;
+        yyerrok;
+    }
+  | IF '(' error ')' Stmt ELSE Stmt{
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"If_Else_Recover");
+        node->addFirstChild($5);
+        $5->addNextSibling($7);
+        $$ = node;
+        yyerrok;
+    }
+  | FOR '(' error ')' Stmt{
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"For_Recover");
+        node->addFirstChild($5);
+        $$ = node;
+        yyerrok;
+    }
+  | error SEMI{
+        $$ = NULL;
+        yyerrok;
+    }
+  | error '}'{
+        $$ = NULL;
+        yyerrok;
+    }
   ;
 //with descriptor cannot
 Def:
@@ -759,6 +802,23 @@ int  main(int argc, char** argv)
     while ( yylex_dump() != 0 ) { }
     return 0;
   }
+  if ( argc > 1 && strcmp(argv[1], "--parse-only") == 0 ) {
+    /* ===== 语法分析模式：--parse-only [文件] =====
+     * 仅做语法分析（含错误恢复），退出码: 0=成功, 1=有语法错误
+     */
+    if ( argc > 2 ) {
+      if (! (yyin = fopen(argv[2], "r" ) )){
+        perror(argv[2]);
+        return 1;
+      }
+    } else {
+      yyin = stdin;
+    }
+    do {
+      yyparse();
+    } while(!feof(yyin));
+    return (syntax_error_count > 0) ? 1 : 0;
+  }
   if ( argc > 1 ) {
     if (! (yyin = fopen(argv[1], "r" ) )){
       perror(argv[1]);
@@ -771,6 +831,11 @@ int  main(int argc, char** argv)
   do {
 		yyparse();
 	} while(!feof(yyin));
+  if (syntax_error_count > 0) {
+    /* 有语法错误时不生成中间代码/汇编，避免空 AST 崩溃 */
+    fprintf(stderr, "语法分析失败，跳过中间代码与汇编生成\n");
+    return 1;
+  }
   InterCode interCode = InterCode(root);
   interCode.Root_Generate();
   SymbolTable* root_table = interCode.getTable();
@@ -783,7 +848,11 @@ int  main(int argc, char** argv)
 
 }
 
-void yyerror(char *s)
+void yyerror(const char *s)
 {
-  fprintf(stderr, "error: %s\n", s);
+  fprintf(stderr, "语法错误 第%d行: %s\n", yylineno, s);
+  if (++syntax_error_count >= 20) {
+    fprintf(stderr, "语法错误过多(>=20)，终止编译\n");
+    exit(1);
+  }
 }
