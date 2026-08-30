@@ -62,6 +62,7 @@ std::stack<SymbolTable*> SymbolTableList;
 %type <ast> BlockList
 %type <ast> Block
 %type <ast> Vardef
+%type <ast> ArrayDims
 %type <ast> Descriptor
 %type <ast> Func
 %type <ast> VarList
@@ -152,16 +153,9 @@ Vardef:
         $$ = node;
     }
   //array,like a[10]
-  | IDENTIFIER '[' CONST ']'{//id[10]
-    // printf("vardef->identifier[const] \n");
-        AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_id[const]");
-        AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $3);
-        const_node->line = yylineno;
-        AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $1);
-        var_node->line = yylineno;
-        node->addFirstChild(var_node);
-        var_node->addNextSibling(const_node);
-        $$ = node;
+  | ArrayDims{//a[10] / a[2][3] / a[2][3][4]（阶段8：多维数组）
+    // printf("vardef->arraydims \n");
+        $$ = $1;
     }
   | IDENTIFIER '[' Exp ']'{
     // printf("vardef->identifier[exp] \n");
@@ -186,7 +180,37 @@ Vardef:
         var_node->line = yylineno;
         node->addFirstChild(var_node);
         $$ = node;
-  }
+    }
+  | MUL MUL IDENTIFIER{//**p（阶段8：多重指针声明）
+    // printf("vardef->**identifier \n");
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_**id");
+        AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $3);
+        var_node->line = yylineno;
+        node->addFirstChild(var_node);
+        $$ = node;
+    }
+  ;
+
+// 多维数组声明：a[2][3]（仅常量维度；阶段8新增）
+ArrayDims:
+    IDENTIFIER '[' CONST ']'{//id[10]（一维，兼容原规则）
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_id[const]");
+        AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $3);
+        const_node->line = yylineno;
+        AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $1);
+        var_node->line = yylineno;
+        node->addFirstChild(var_node);
+        var_node->addNextSibling(const_node);
+        $$ = node;
+    }
+  | ArrayDims '[' CONST ']'{//a[2][3]：嵌套（内层为先出现的维度）
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_id[const]");
+        AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $3);
+        const_node->line = yylineno;
+        node->addFirstChild($1);
+        $1->addNextSibling(const_node);
+        $$ = node;
+    }
   ;
   Consts:
     Consts COMMA CONST{
@@ -223,6 +247,11 @@ Descriptor:
   | INT MUL{//int*
         // printf("descriptor->int mul \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::MODIFY,"INT*_TYPE");
+        $$ = node;
+    }
+  | INT MUL MUL{//int**（阶段8：多重指针）
+        // printf("descriptor->int mul mul \n");
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::MODIFY,"INT**_TYPE");
         $$ = node;
     }
   ;
@@ -309,6 +338,14 @@ Param:
     // printf("param->*identifier \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_*id");
         AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $3);
+        node->addFirstChild($1);
+        $1->addNextSibling(var_node);
+        $$ = node;
+  }
+  | Descriptor MUL MUL IDENTIFIER{
+    // printf("param->**identifier \n");
+        AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_**id");
+        AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $4);
         node->addFirstChild($1);
         $1->addNextSibling(var_node);
         $$ = node;
@@ -756,11 +793,16 @@ Exp:
       node->addFirstChild(id_node);
       $$ = node;
   }
-  | IDENTIFIER '[' Exp ']'{//like a[2+3]
-      AbstractAstNode* node = new AbstractAstNode(AstNodeType::OPERATION,"id[exp]");
-      AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $1);
+  | MUL MUL IDENTIFIER{//**id（阶段8：多重指针解引用）
+      AbstractAstNode* node = new AbstractAstNode(AstNodeType::OPERATION,"**id");
+      AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $3);
       node->addFirstChild(id_node);
-      id_node->addNextSibling($3);
+      $$ = node;
+  }
+  | Exp '[' Exp ']'{//like a[2+3] 或 a[i][j]（阶段8：多维下标）
+      AbstractAstNode* node = new AbstractAstNode(AstNodeType::OPERATION,"id[exp]");
+      node->addFirstChild($1);
+      $1->addNextSibling($3);
       $$=node;
     }
   | SINGLAND IDENTIFIER {

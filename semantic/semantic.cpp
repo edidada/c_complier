@@ -18,6 +18,7 @@ enum TypeKind { TK_INT, TK_PTR, TK_ARRAY, TK_VOID, TK_FUNC, TK_ERR };
 struct TypeInfo {
     TypeKind kind;
     int arraySize;  // ARRAY 元素个数（无大小为 0）
+    std::vector<int> arrayDims;  /* 阶段8：各维大小（如 a[2][3] → {2,3}；非数组为空） */
     TypeInfo() : kind(TK_ERR), arraySize(0) {}
     TypeInfo(TypeKind k, int sz = 0) : kind(k), arraySize(sz) {}
     std::string name() const {
@@ -148,10 +149,25 @@ static void checkStmt(AbstractAstNode* n);
 static void checkDefList(AbstractAstNode* list, const TypeInfo& base);
 
 /* ============ 类型推导辅助 ============ */
+/* 阶段8：递归收集多维数组声明 a[2][3] 的各维大小与底层名字。
+   嵌套 AST：array_id[const]( array_id[const]( ID, 2 ), 3 ) → dims={2,3} */
+static void collectArrayDims(AbstractAstNode* node, std::vector<int>& dims, AbstractAstNode*& id) {
+    if (node == NULL) return;
+    AbstractAstNode* first = node->getFirstChild();
+    if (first != NULL && first->content == "array_id[const]") {
+        collectArrayDims(first, dims, id);   /* 内层维度先 */
+    } else {
+        id = first;                          /* 最内层：第一个子节点是 ID */
+    }
+    AbstractAstNode* cn = first ? first->getNextSibling() : NULL;
+    if (cn != NULL) dims.push_back(atoi(cn->content.c_str()));
+}
+
 static TypeInfo typeFromDescriptor(AbstractAstNode* desc) {
     if (desc == NULL) return TypeInfo(TK_INT);
-    if (desc->content == "VOID_TYPE")  return TypeInfo(TK_VOID);
-    if (desc->content == "INT*_TYPE")  return TypeInfo(TK_PTR);
+    if (desc->content == "VOID_TYPE")   return TypeInfo(TK_VOID);
+    if (desc->content == "INT*_TYPE")   return TypeInfo(TK_PTR);
+    if (desc->content == "INT**_TYPE")  return TypeInfo(TK_PTR);  /* 阶段8：多重指针 */
     return TypeInfo(TK_INT);
 }
 
@@ -165,6 +181,7 @@ static TypeInfo typeFromParam(AbstractAstNode* param) {
     if (c == "Param_ID[]" ||
         c == "Param_ID[const]") return TypeInfo(TK_ARRAY);       // int a[] / int a[N]
     if (c == "array_*id")     return TypeInfo(TK_PTR);           // int *a
+    if (c == "array_**id")    return TypeInfo(TK_PTR);           // int **a（阶段8）
     if (c == "array_&id")     return TypeInfo(TK_PTR);           // int &a
     if (c == "Param_NID")     return base;                       // 无名参数
     return TypeInfo();
@@ -223,15 +240,18 @@ static TypeInfo checkVardef(AbstractAstNode* vd, const TypeInfo& base) {
     if (c == "Block_Single_Vardef") {
         id = vd->getFirstChild();
     } else if (c == "array_id[const]") {
-        id = vd->getFirstChild();
         t = TypeInfo(TK_ARRAY);
-        AbstractAstNode* cn = id ? id->getNextSibling() : NULL;
-        if (cn && cn->nodeType == AstNodeType::CONST_INT)
-            t.arraySize = atoi(cn->content.c_str());
+        /* 阶段8：多维数组 a[2][3]（嵌套 AST，递归收集各维大小） */
+        std::vector<int> dims;
+        collectArrayDims(vd, dims, id);
+        t.arrayDims = dims;
+        int total = 1;
+        for (size_t i = 0; i < dims.size(); ++i) total *= dims[i];
+        t.arraySize = total;
     } else if (c == "array_id[exp]" || c == "array_id[]") {
         id = vd->getFirstChild();
         t = TypeInfo(TK_ARRAY);
-    } else if (c == "array_*id") {
+    } else if (c == "array_*id" || c == "array_**id") {  /* 阶段8：多重指针 */
         id = vd->getFirstChild();
         t = TypeInfo(TK_PTR);
     }
@@ -341,13 +361,15 @@ static TypeInfo checkExp(AbstractAstNode* n) {
                         cur = cur->getFirstChild();
                     }
                     if (cur != NULL && cur->content == "Func_Single_Arg") {
-                        /* 从里到外翻转后依次取 */
+                        /* 阶段8修复：Args 文法为左递归（Args: Args COMMA Exp），
+                           最内层 Func_Single_Arg 是首实参，各层 getNextSibling() 依次是后续实参。
+                           正确顺序：先取最内层 Single 实参，再由内向外取各层尾部实参 */
+                        args.push_back(checkExp(cur->getFirstChild()));
                         for (int i = (int)chain.size() - 1; i >= 0; --i) {
                             AbstractAstNode* cc = chain[i]->getFirstChild();
                             AbstractAstNode* tailNode = cc ? cc->getNextSibling() : NULL;
                             if (tailNode) args.push_back(checkExp(tailNode));
                         }
-                        args.push_back(checkExp(cur->getFirstChild()));
                     }
                     (void)sub; (void)tail;
                 }
@@ -428,10 +450,13 @@ static TypeInfo checkExp(AbstractAstNode* n) {
             return checkExp(a);
         }
 
-        if (c == "id[exp]") {  // R6
-            AbstractAstNode* id = a;
-            TypeInfo it = checkExp(b);
-            (void)it;
+        if (c == "id[exp]") {  // R6（阶段8：支持多维下标 a[i][j]）
+            /* 第一子节点是 Exp：ID_Exp（一维）或嵌套 id[exp]（多维） */
+            checkExp(b);  // 下标表达式必须合法
+            AbstractAstNode* cur = a;
+            int depth = 0;
+            while (cur != NULL && cur->content == "id[exp]") { depth++; cur = cur->getFirstChild(); }
+            AbstractAstNode* id = (cur != NULL && cur->content == "ID_Exp") ? getFirstName(cur) : NULL;
             if (id == NULL) return TypeInfo();
             VarSym* s = lookup(id->content);
             if (s == NULL) {
@@ -439,8 +464,38 @@ static TypeInfo checkExp(AbstractAstNode* n) {
                 return TypeInfo();
             }
             s->used = true;  /* 阶段7：数组/指针元素访问视为使用 */
-            if (!(s->type.isArray() || s->type.isPtr())) {  // C5
-                semErr(findLine(n), "下标操作数不是数组/指针（'" + id->content + "' 是 " + s->type.name() + "）");
+            depth++;  // 本次下标计入
+            if (s->type.isPtr()) {
+                if (depth > 1) {  // 指针只允许一维下标
+                    semErr(findLine(n), "多维下标仅支持数组（'" + id->content + "' 是指针）");
+                    return TypeInfo();
+                }
+                return TypeInfo(TK_INT);
+            }
+            if (s->type.isArray()) {
+                int ndim = s->type.arrayDims.empty() ? 1 : (int)s->type.arrayDims.size();
+                if (depth > ndim) {
+                    semErr(findLine(n), "下标维度超出声明（'" + id->content + "' 是 " + std::to_string(ndim) + " 维数组，使用了 " + std::to_string(depth) + " 层下标）");
+                    return TypeInfo(TK_INT);
+                }
+                if (depth < ndim) return TypeInfo(TK_ARRAY);  // 下标未用尽，可继续
+                return TypeInfo(TK_INT);
+            }
+            semErr(findLine(n), "下标操作数不是数组/指针（'" + id->content + "' 是 " + s->type.name() + "）");  // C5
+            return TypeInfo(TK_INT);
+        }
+
+        if (c == "**id") {  // R7（阶段8：多重指针解引用 **p）
+            AbstractAstNode* id = a;
+            if (id == NULL) return TypeInfo();
+            VarSym* s = lookup(id->content);
+            if (s == NULL) {
+                semErr(findLine(id), "变量 '" + id->content + "' 未声明");
+                return TypeInfo();
+            }
+            s->used = true;  /* 阶段7：解引用视为使用 */
+            if (!(s->type.isPtr() || s->type.isArray())) {
+                semErr(findLine(n), "解引用操作数不是指针（'" + id->content + "' 是 " + s->type.name() + "）");
                 return TypeInfo();
             }
             return TypeInfo(TK_INT);

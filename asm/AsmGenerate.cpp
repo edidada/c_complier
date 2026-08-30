@@ -16,32 +16,65 @@ static bool isNumStr(const std::string& s) {
     return true;
 }
 
-// 判断 "a[i]" 是否为变量索引（i 非整数常量）（阶段5新增）
+// 判断 "a[i]" 是否为变量索引（任一维下标非整数常量即视为变量索引）（阶段5/8）
 bool AsmGenerate::isVarIndex(const std::string& name) {
-    size_t lp = name.find("[");
-    if (lp == std::string::npos) return false;
-    size_t rp = name.find("]");
-    if (rp == std::string::npos) return false;
-    std::string idx = name.substr(lp + 1, rp - lp - 1);
-    return !isNumStr(idx);
+    size_t pos = 0;
+    while (true) {
+        size_t lp = name.find("[", pos);
+        if (lp == std::string::npos) break;
+        size_t rp = name.find("]", lp);
+        if (rp == std::string::npos) break;
+        std::string idx = name.substr(lp + 1, rp - lp - 1);
+        if (!isNumStr(idx)) return true;
+        pos = rp + 1;
+    }
+    return false;
 }
 
-// 计算 a[i]（i 为变量）的地址放入 edx：edx = ebp - base_offset + i*4（阶段5新增）
+/* 阶段8：edx = 指针解引用 N 层后的地址（N = 名字 '*' 前缀个数，如 *p → 1 层，**p → 2 层） */
+static void genStarDerefAddr(AsmCode& code, const std::string& name, int offset) {
+    code.mov(asmRegister::edx, code.generateVar(offset));
+    int n = 0;
+    while (n < (int)name.size() && name[n] == '*') n++;
+    for (int i = 1; i < n; ++i) {
+        code.mov(asmRegister::edx, "dword[edx]");
+    }
+}
+
+// 计算 a[i] / a[i][j]（含变量下标）的地址放入 edx：edx = ebp - base_offset - Σ idx_k*stride_k
+// （阶段5新增单维，阶段8扩展多维：步长由基符号 dims 推导）
 void AsmGenerate::genArrayAddrIntoEdx(const std::string& name) {
     size_t lp = name.find("[");
-    size_t rp = name.find("]");
     std::string baseName = name.substr(0, lp);
-    std::string idxStr = name.substr(lp + 1, rp - lp - 1);
     Symbol* baseSym = this->currentTable->findSymbolLocally(baseName);
     if (baseSym == NULL) baseSym = this->currentTable->findSymbolGlobally(baseName);
-    Symbol* idxSym = this->currentTable->findSymbolLocally(idxStr);
-    if (idxSym == NULL) idxSym = this->currentTable->findSymbolGlobally(idxStr);
     int baseOffset = baseSym->getSymOffset() - baseSym->getWidth() + 4;
-    this->asmcode.mov(asmRegister::ecx, this->asmcode.generateVar(idxSym->getSymOffset()));
-    this->asmcode.generateBinaryInstructor("imul", asmRegister::ecx, "4");
+    const std::vector<int>& dims = baseSym->getDims();
     this->asmcode.mov(asmRegister::edx, asmRegister::ebp);
     this->asmcode.sub(asmRegister::edx, std::to_string(baseOffset));
-    this->asmcode.sub(asmRegister::edx, asmRegister::ecx);
+    size_t pos = 0;
+    size_t dimIndex = 0;
+    while (true) {
+        size_t l2 = name.find("[", pos);
+        if (l2 == std::string::npos) break;
+        size_t r2 = name.find("]", l2);
+        if (r2 == std::string::npos) break;
+        std::string idxStr = name.substr(l2 + 1, r2 - l2 - 1);
+        int stride = 4;
+        for (size_t d = dimIndex + 1; d < dims.size(); ++d) stride *= dims[d];
+        if (isNumStr(idxStr)) {
+            int iv = atoi(idxStr.c_str());
+            if (iv != 0) this->asmcode.sub(asmRegister::edx, std::to_string(iv * stride));
+        } else {
+            Symbol* idxSym = this->currentTable->findSymbolLocally(idxStr);
+            if (idxSym == NULL) idxSym = this->currentTable->findSymbolGlobally(idxStr);
+            this->asmcode.mov(asmRegister::ecx, this->asmcode.generateVar(idxSym->getSymOffset()));
+            this->asmcode.generateBinaryInstructor("imul", asmRegister::ecx, std::to_string(stride));
+            this->asmcode.sub(asmRegister::edx, asmRegister::ecx);
+        }
+        pos = r2 + 1;
+        dimIndex++;
+    }
 }
 
 //get 2 value back:1.name 2.offset
@@ -49,9 +82,8 @@ Symbol* AsmGenerate::getoffsetofarray(Symbol* arg)
 {
     Symbol *result;
     string result_name=arg->getIDName();
-    char *splited_result=strtok((char*)result_name.c_str(), "[");
-    
-    string firstname=splited_result;
+    size_t lp = result_name.find("[");
+    string firstname = result_name.substr(0, lp);
     Symbol* re = this->currentTable->findSymbolLocally(firstname);
     if(re == NULL){
         re = this->currentTable->findSymbolGlobally(firstname);
@@ -62,14 +94,22 @@ Symbol* AsmGenerate::getoffsetofarray(Symbol* arg)
     }
     int base_offset =re->getSymOffset()-re->getWidth()+4;
     int total_offset=base_offset;
-    //result.push_back(firstname);
-    //std::cout<<"splited "<<splited_result<<"\n";
-    splited_result=strtok(NULL," ");
-    //std::cout<<"splited "<<splited_result<<"\n";
-    int numberi=atoi(splited_result);
-    //get i from reg
-    // b[0]
-    total_offset+=numberi*4;
+    /* 阶段8：支持多维常量下标 a[1][2]（步长由基符号 dims 推导） */
+    const std::vector<int>& dims = re->getDims();
+    size_t pos = 0;
+    size_t dimIndex = 0;
+    while (true) {
+        size_t l2 = result_name.find("[", pos);
+        if (l2 == std::string::npos) break;
+        size_t r2 = result_name.find("]", l2);
+        if (r2 == std::string::npos) break;
+        std::string idxStr = result_name.substr(l2 + 1, r2 - l2 - 1);
+        int stride = 4;
+        for (size_t d = dimIndex + 1; d < dims.size(); ++d) stride *= dims[d];
+        total_offset += atoi(idxStr.c_str()) * stride;
+        pos = r2 + 1;
+        dimIndex++;
+    }
     result=new Symbol(firstname,SymbolType::var);
     result->setSymOffset(total_offset);
     return result;
@@ -312,8 +352,8 @@ void AsmGenerate::generateArithmetic(QuadItem q) {
         string result_name=result->getIDName();
         // ===== 阶段5：指针/函数返回值特判 =====
         if (result_name[0] == '*') {
-            // *p := val（解引用写入）
-            this->asmcode.mov(asmRegister::edx, this->asmcode.generateVar(result->getSymOffset()));
+            // *p := val / **p := val（解引用写入，阶段8支持多重）
+            genStarDerefAddr(this->asmcode, result_name, result->getSymOffset());
             if (flag == 7) {
                 Symbol* arg1 = q.getArg(1).var;
                 std::string tn = arg1->getIDName();
@@ -353,8 +393,8 @@ void AsmGenerate::generateArithmetic(QuadItem q) {
                 return;
             }
             if (arg1Name[0] == '*') {
-                // b := *p（解引用读取）
-                this->asmcode.mov(asmRegister::edx, this->asmcode.generateVar(arg1->getSymOffset()));
+                // b := *p / b := **p（解引用读取，阶段8支持多重）
+                genStarDerefAddr(this->asmcode, arg1Name, arg1->getSymOffset());
                 this->asmcode.mov(asmRegister::eax, "dword[edx]");
                 this->asmcode.mov(this->asmcode.generateVar(result->getSymOffset()), asmRegister::eax);
                 return;
@@ -949,8 +989,13 @@ void AsmGenerate::generateprint(QuadItem q)
     // 支持临时变量/数字常量/数组访问（阶段5增强）
     if (name[0] == 't') {
         asmRegister reg = this->findRegister(name);
-        this->asmcode.mov(asmRegister::eax, reg);
-        this->releaseRegister(reg);
+        // 阶段8修复：临时变量若已溢出到栈（寄存器中找不到），改从栈读取
+        if (reg == asmRegister::unset) {
+            this->asmcode.mov(asmRegister::eax, this->asmcode.generateVar(result->getSymOffset()));
+        } else {
+            this->asmcode.mov(asmRegister::eax, reg);
+            this->releaseRegister(reg);
+        }
     } else if (isNumStr(name)) {
         this->asmcode.mov(asmRegister::eax, name);
     } else if (name.find("[") < name.size()) {
@@ -1022,6 +1067,11 @@ void AsmGenerate::generateParam(QuadItem q) {
         this->releaseRegister(reg);
     } else if (isNumStr(name)) {
         this->asmcode.push(name);
+    } else if (name[0] == '&') {
+        // 阶段8：实参为取地址 &x，压入 x 的地址（edx = ebp - x_offset）
+        this->asmcode.mov(asmRegister::edx, asmRegister::ebp);
+        this->asmcode.sub(asmRegister::edx, std::to_string(val->getSymOffset()));
+        this->asmcode.push(asmRegister::edx);
     } else {
         this->asmcode.push(DOUBLE_WORD + this->asmcode.generateVar(val->getSymOffset()));
     }

@@ -24,6 +24,7 @@ private:
     int sym_offset;
     std::string value;
     bool isUsed;
+    std::vector<int> dims;  /* 阶段8：数组各维大小（如 a[2][3] → {2,3}） */
 public:
     Symbol();
     Symbol(std::string name, SymbolType type = SymbolType::var, int width = 4, std::string init_value = "0");
@@ -31,6 +32,8 @@ public:
     inline SymbolType &getSymbolType(){return this->idType;}
     inline int getWidth(){return this->width;}
     inline void setWidth(int width){this->width = width;}
+    inline void setDims(const std::vector<int>& d){this->dims = d;}
+    inline const std::vector<int>& getDims(){return this->dims;}
     inline int getSymOffset(){return this->sym_offset;}
     inline void setSymOffset(int offset){this->sym_offset = offset;}
     inline void showSymbolInfor(){

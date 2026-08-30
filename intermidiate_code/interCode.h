@@ -97,6 +97,9 @@ public:
     // 从ast生成中间代码；
     InterCode(AbstractAstNode* root);
     Symbol* Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol_table);
+    /* 阶段8：数组元素/指针解引用符号作为"取值"操作数（算术/比较/打印/实参/返回）时，
+       先取出为临时变量（t := a[i][j]），避免汇编层按普通变量（offset 0）读取 */
+    Symbol* normalizeOperand(Symbol* s);
     SymbolTable* Body_Generate(AbstractAstNode* node, SymbolTable* symbol_table);
     void Generate(AbstractAstNode* node, SymbolTable* symbol_tabl);
     void Root_Generate();

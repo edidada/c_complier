@@ -225,6 +225,27 @@ add_test(NAME e2e_test6 COMMAND bash
         $<TARGET_FILE:scanner_parser_test>
         ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test6.c
         "1")
+# ==================== CTest 阶段8 e2e（函数调用补全/多维数组/多重指针）====================
+add_test(NAME e2e_test7 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test7.c
+        "21\\n6\\n3\\n5")
+add_test(NAME e2e_test8 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test8.c
+        "30\\n20")
+add_test(NAME e2e_test9 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test9.c
+        "99\\n99\\n55")
+add_test(NAME e2e_test10 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test10.c
+        "42")
 
 # ==================== CTest 词法测试 (T1) ====================
 add_test(NAME lex_suite COMMAND bash
