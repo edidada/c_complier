@@ -54,7 +54,7 @@ segment .data public align=4 class=data use32
 segment .data
 %endif
 
-int_format	    db  "%i", 0
+int_format	    db  "%i", 10, 0
 string_format       db  "%s", 0
 reg_format	    db  "Register Dump # %d", NL
 		    db  "EAX = %.8X EBX = %.8X ECX = %.8X EDX = %.8X", NL

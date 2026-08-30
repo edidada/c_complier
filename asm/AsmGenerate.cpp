@@ -990,7 +990,7 @@ void AsmGenerate::generate()
     // Set header info
     std::cout<<"begin _asm\n";
     std::cout<<"size="<<quad_list.size()<<"\n";
-    this->asmcode.addCode("section .text\nglobal main\nmain:\npush ebx\nmov ebp,esp\n");
+    this->asmcode.addCode("section .text\nglobal main\nmain:\npush ebx\nmov ebp,esp\nsub esp," + std::to_string(currentTable->getOffset()) + "\n");
     for (size_t i = 0; i < this->quad_list.size(); i++) 
     {
         QuadItem *q = quad_list[i];
@@ -1038,7 +1038,7 @@ void AsmGenerate::generate()
         }*/
     }
     //end
-    this->asmcode.addCode("pop ebx\nret\n");
+    this->asmcode.addCode("mov eax,0\nmov esp,ebp\npop ebx\nret\n");
     //write to asm
     
     std::ofstream out("asm/test.asm");

@@ -188,3 +188,36 @@ add_executable(test_func_symbol
         symbol_table/symbol.cpp
         symbol_table/FuncSymbol.cpp
 )
+
+# ==================== CTest 端到端验收测试 (T0) ====================
+enable_testing()
+add_test(NAME e2e_test1 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test1.c
+        "3\\n2")
+add_test(NAME e2e_test2 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test2.c
+        "3628800")
+add_test(NAME e2e_test3 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test3.c
+        "39916800\\n8")
+add_test(NAME e2e_test4 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test4.c
+        "100")
+add_test(NAME e2e_test5 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test5.c
+        "8")
+add_test(NAME e2e_test6 COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test6.c
+        "1")

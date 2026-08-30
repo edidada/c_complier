@@ -369,5 +369,7 @@ MigrationBackup/
 .ionide/
 
 .idea
-cmake-*build_asan/
+cmake-*
+build_asan/
 build_debug/
+asm/test.asm
