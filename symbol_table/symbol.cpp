@@ -76,7 +76,7 @@ Symbol* SymbolTable:: findSymbolGlobally(std::string name){
         }else return result;
     }
     std::cout<<"\033[31m Error: Undefined ID: \033[0m"<<name<<std::endl;
-    exit(1);
+    return nullptr;
 }
 
 SymbolTable* SymbolTable:: addChildTable(bool isFunc){

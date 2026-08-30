@@ -369,4 +369,5 @@ MigrationBackup/
 .ionide/
 
 .idea
-cmake-*
+cmake-*build_asan/
+build_debug/

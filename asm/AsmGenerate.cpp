@@ -17,6 +17,10 @@ Symbol* AsmGenerate::getoffsetofarray(Symbol* arg)
     if(re == NULL){
         re = this->currentTable->findSymbolGlobally(firstname);
     }
+    if(re == NULL){
+        std::cout<<"\033[31m Error: Undefined array: \033[0m"<<firstname<<std::endl;
+        return NULL;
+    }
     int base_offset =re->getSymOffset()-re->getWidth();
     int total_offset=base_offset;
     //result.push_back(firstname);
@@ -238,6 +242,7 @@ asmRegister AsmGenerate::getRegister(std::string var) {
         this->registerUsedVar[index - 1] = var;
         return asmRegister::ecx;
     }
+    return asmRegister::unset;
 }
 
 asmRegister AsmGenerate::findRegister(std::string var) {
@@ -246,6 +251,7 @@ asmRegister AsmGenerate::findRegister(std::string var) {
             return asmRegister(i + 1);
         }
     }
+    return asmRegister::unset;
 }
 
 void AsmGenerate::generateArithmetic(QuadItem q) {

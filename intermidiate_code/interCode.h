@@ -73,6 +73,7 @@ public:
             return this->arg2;
         else if (index == 3)
             return this->result;
+        return this->result;
     }
 
 };

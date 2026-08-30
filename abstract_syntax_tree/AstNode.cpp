@@ -130,10 +130,11 @@ void AbstractAstNode:: addNextSibling(AbstractAstNode* node) {
 void AbstractAstNode:: printNodeInfo() {
     std::string typeName = this->getNodeTypeName();
     int depth = this->depth;
-    char* prefix = new char[depth*4];
+    char* prefix = new char[depth*4 + 1];
     for(int i=0; i<depth*4; i++){
         prefix[i] = ' ';
     }
+    prefix[depth*4] = '\0';
     int i = 0;
     AbstractAstNode* father = this->parent;
     while(i < depth){

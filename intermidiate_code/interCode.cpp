@@ -742,8 +742,8 @@ void InterCode:: Root_Generate(){
 
 void InterCode:: Generate(AbstractAstNode* node, SymbolTable* symbol_table) {
     if (node == NULL ){
-        std::cout<<"Null Node"<<std::endl;
-        exit(1);
+        std::cout<<"Warning: Generate received null node, skipped."<<std::endl;
+        return;
     }
     std::string node_content = node->content;
     int type = static_cast<int>(node->nodeType);
@@ -832,16 +832,15 @@ void InterCode:: Generate(AbstractAstNode* node, SymbolTable* symbol_table) {
         break;
 
         default:
-            std::cout<<"No such AstNodeType!"<<std::endl; 
-            exit(1);
+            std::cout<<"Warning: Generate unknown AstNodeType: "<<node_content<<", skipped."<<std::endl; 
         break;
     }
 }
 
 Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol_table){
     if(node == NULL){
-        std::cout<<"Empty Pointer!"<<std::endl;
-        exit(1);
+        std::cout<<"Warning: Exp_Stmt_Generate received null node, skipped."<<std::endl;
+        return nullptr;
     }
     std::string node_content = node->content;
     int type = static_cast<int>(node->nodeType);
@@ -1068,6 +1067,10 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
                 if(var == NULL){
                     var = symbol_table->findSymbolGlobally(var_name);
                 }
+                if(var == NULL){
+                    std::cout<<"\033[31m Error: Undefined variable in &: \033[0m"<<var_name<<std::endl;
+                    return nullptr;
+                }
                 int offset = var->getSymOffset();
                 Symbol* addr_var = new Symbol("&"+var_name, SymbolType::pointer);
                 addr_var->setSymOffset(offset);
@@ -1080,6 +1083,10 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
                 Symbol* pointer = symbol_table->findSymbolLocally(pointer_name);
                 if(pointer == NULL){
                     pointer = symbol_table->findSymbolGlobally(pointer_name);
+                }
+                if(pointer == NULL){
+                    std::cout<<"\033[31m Error: Undefined pointer in *: \033[0m"<<pointer_name<<std::endl;
+                    return nullptr;
                 }
                 int offset = pointer->getSymOffset();
                 Symbol* star_pointer = new Symbol("*"+pointer_name, SymbolType::var);
@@ -1098,9 +1105,14 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
                     if(var == NULL){
                         var = symbol_table->findSymbolGlobally(var_name);
                     }
-
-                    QuadItem* quad = new QuadItem(var, OpType::PRINT);
-                    this->quad_list.push_back(quad);
+                    if(var == NULL){
+                        std::cout<<"\033[31m Error: Undefined variable in print_int: \033[0m"<<var_name<<std::endl;
+                    }
+                    else
+                    {
+                        QuadItem* quad = new QuadItem(var, OpType::PRINT);
+                        this->quad_list.push_back(quad);
+                    }
                 }
             }
         }
@@ -1125,15 +1137,16 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
             break;
 
         default:
-            std::cout<<"No such AstNodeType!"<<std::endl; 
-        exit(1);
+            std::cout<<"Warning: Exp_Stmt_Generate unknown AstNodeType: "<<node_content<<", skipped."<<std::endl; 
+        break;
     }
+    return nullptr;
 }
 
 SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbol_table){
     if (node == NULL ){
-        std::cout<<"Null Node"<<std::endl;
-        exit(1);
+        std::cout<<"Warning: Body_Generate received null node, skipped."<<std::endl;
+        return symbol_table;
     }
     std::string node_content = node->content;
     int type = static_cast<int>(node->nodeType);
@@ -1315,33 +1328,34 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
                         if(dup_check!= NULL && static_cast<int>(dup_check->getSymbolType()) == 2 )
                         {
                             std::cout<<"\033[31m Error!  Duplicate defination for Variable_name  \033[0m"<<var_name<<std::endl;
-                            exit(1);
                         }
-
-                        Symbol* arg1;
-                        AbstractAstNode* arg1_astNode = child->getFirstChild()->getNextSibling();
-                        arg1 = Exp_Stmt_Generate(arg1_astNode, symbol_table);
-                        std::string arg1_content = arg1->getIDName();
-                        
-                        Symbol* var = new Symbol(var_name, SymbolType:: var, 4);
-                        int var_symbol_type = static_cast<int>(var->getSymbolType());
-                        int arg1_symbol_type = static_cast<int>(arg1->getSymbolType());
-                        if(var_symbol_type == 2 && arg1_symbol_type == 2){
-                            symbol_table->setOffset(symbol_table->getOffset()+var->getWidth()); 
-                            var->setSymOffset(symbol_table->getOffset());
-                            symbol_table->addSymbol(var);
-                        }
-                        QuadItem* quad;
-                        if(isNumber(arg1_content))
+                        else
                         {
-                            // std::cout<<"arg1 is a number: "<< atoi(arg1->getIDName().c_str())<<std::endl;
-                            quad = new QuadItem(var, assign, atoi(arg1->getIDName().c_str()));
+                            Symbol* arg1;
+                            AbstractAstNode* arg1_astNode = child->getFirstChild()->getNextSibling();
+                            arg1 = Exp_Stmt_Generate(arg1_astNode, symbol_table);
+                            std::string arg1_content = arg1->getIDName();
+                            
+                            Symbol* var = new Symbol(var_name, SymbolType:: var, 4);
+                            int var_symbol_type = static_cast<int>(var->getSymbolType());
+                            int arg1_symbol_type = static_cast<int>(arg1->getSymbolType());
+                            if(var_symbol_type == 2 && arg1_symbol_type == 2){
+                                symbol_table->setOffset(symbol_table->getOffset()+var->getWidth()); 
+                                var->setSymOffset(symbol_table->getOffset());
+                                symbol_table->addSymbol(var);
+                            }
+                            QuadItem* quad;
+                            if(isNumber(arg1_content))
+                            {
+                                // std::cout<<"arg1 is a number: "<< atoi(arg1->getIDName().c_str())<<std::endl;
+                                quad = new QuadItem(var, assign, atoi(arg1->getIDName().c_str()));
+                            }
+                            else 
+                            {
+                                quad = new QuadItem(var, assign, arg1);
+                            }
+                            this->quad_list.push_back(quad);
                         }
-                        else 
-                        {
-                            quad = new QuadItem(var, assign, arg1);
-                        }
-                        this->quad_list.push_back(quad);
 
                     }
                     else if(child->getFirstChild()->content == "array_*id"){
@@ -1352,15 +1366,16 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
                         if(dup_check!= NULL && static_cast<int>(dup_check->getSymbolType()) == 4 )
                         {
                             std::cout<<"\033[31m  Error! Duplicate defination for Variable_name \033[0m"<<var_name<<std::endl;
-                            exit(1);
                         }
-                        
-                        Symbol* var = new Symbol(var_name, SymbolType::pointer);
-                        Symbol* addr_var = Exp_Stmt_Generate( child->getFirstChild()->getNextSibling(),symbol_table);
-                        var->setSymOffset(addr_var->getSymOffset());
-                        symbol_table->addSymbol(var);
-                        QuadItem* quad = new QuadItem(var, assign, addr_var);
-                        quad_list.push_back(quad);
+                        else
+                        {
+                            Symbol* var = new Symbol(var_name, SymbolType::pointer);
+                            Symbol* addr_var = Exp_Stmt_Generate( child->getFirstChild()->getNextSibling(),symbol_table);
+                            var->setSymOffset(addr_var->getSymOffset());
+                            symbol_table->addSymbol(var);
+                            QuadItem* quad = new QuadItem(var, assign, addr_var);
+                            quad_list.push_back(quad);
+                        }
                     }
                 }
                 else if(child->content == "Var_ONLY"){
@@ -1371,15 +1386,16 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
                         if(dup_check != NULL && static_cast<int>(dup_check->getSymbolType()) == 5)
                         {
                             std::cout<<"\033[31m Error! Duplicate defination for Array_name \033[0m"<<var_name<<std::endl;
-                            exit(1);
                         }
-                        std::string size_str = child->getFirstChild()->getFirstChild()->getNextSibling()->content;
-                        int size = atoi(size_str.c_str());
-                        Symbol* var = new Symbol(var_name, SymbolType::array, size*4);
-                        symbol_table->setOffset(symbol_table->getOffset()+var->getWidth());
-                        var->setSymOffset(symbol_table->getOffset());
-                        symbol_table->addSymbol(var);
-                        // std::cout<<"Add Symbol "<<var_name<<" into SymbolTable!"<<std::endl;
+                        else
+                        {
+                            std::string size_str = child->getFirstChild()->getFirstChild()->getNextSibling()->content;
+                            int size = atoi(size_str.c_str());
+                            Symbol* var = new Symbol(var_name, SymbolType::array, size*4);
+                            symbol_table->setOffset(symbol_table->getOffset()+var->getWidth());
+                            var->setSymOffset(symbol_table->getOffset());
+                            symbol_table->addSymbol(var);
+                        }
                     }
                     else if(child->getFirstChild()->content == "array_*id"){
                         std::string pointer_name = child->getFirstChild()->getFirstChild()->content;
@@ -1395,13 +1411,14 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
                         if(dup_check!= NULL && static_cast<int>(dup_check->getSymbolType()) == 2 )
                         {
                             std::cout<<"\033[31m Error! Duplicate defination for Variable_name \033[0m"<<var_name<<std::endl;
-                            exit(1);
                         }
-                        Symbol* var = new Symbol(var_name, SymbolType:: var, 4);
-                        symbol_table->setOffset(symbol_table->getOffset()+var->getWidth()); 
-                        var->setSymOffset(symbol_table->getOffset());
-                        symbol_table->addSymbol(var);
-                        // std::cout<<"Add Symbol "<<var_name<<" into SymbolTable!"<<std::endl;
+                        else
+                        {
+                            Symbol* var = new Symbol(var_name, SymbolType:: var, 4);
+                            symbol_table->setOffset(symbol_table->getOffset()+var->getWidth()); 
+                            var->setSymOffset(symbol_table->getOffset());
+                            symbol_table->addSymbol(var);
+                        }
                     }
                    
                 }
@@ -1418,10 +1435,10 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
         }
         break;
         default:
-            std::cout<<"No such AstNodeType!"<<std::endl; 
-            exit(1);
+            std::cout<<"Warning: Body_Generate unknown AstNodeType: "<<node_content<<", skipped."<<std::endl; 
         break;
     }
+    return symbol_table;
 
 }
 
