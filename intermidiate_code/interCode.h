@@ -100,6 +100,8 @@ public:
     SymbolTable* Body_Generate(AbstractAstNode* node, SymbolTable* symbol_table);
     void Generate(AbstractAstNode* node, SymbolTable* symbol_tabl);
     void Root_Generate();
+    // 阶段6：四元式级优化（常量折叠/死代码消除/不可达删除），在打印与汇编生成前调用
+    void optimize();
     // 递归收集函数实参（源顺序求值，收集到 args；cdecl 压栈由 CALL 分支逆序生成 PARAM）
     void GenCallArgs(AbstractAstNode* node, SymbolTable* symbol_table, std::vector<Symbol*>& args);
     // 递归收集函数形参符号（cdecl 负偏移 [ebp+8] 起）入函数体符号表（阶段5新增）

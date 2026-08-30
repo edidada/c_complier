@@ -416,8 +416,15 @@ void AsmGenerate::generateArithmetic(QuadItem q) {
             }
         }
         else {
-            int tempVar = q.getArg(1).target;
-            this->asmcode.mov(result_ebp_offset, DOUBLE_WORD + std::string(" ") +std::to_string(tempVar));
+            int constValue = q.getArg(1).target;
+            std::string resultName = q.getArg(3).var->getIDName();
+            if (resultName[0] == 't') {
+                // 常量折叠产物 t := c：临时变量写入寄存器（阶段6新增）
+                asmRegister resultReg = this->getRegister(resultName);
+                this->asmcode.mov(resultReg, std::to_string(constValue));
+            } else {
+                this->asmcode.mov(result_ebp_offset, DOUBLE_WORD + std::string(" ") +std::to_string(constValue));
+            }
         }
         return;
     }

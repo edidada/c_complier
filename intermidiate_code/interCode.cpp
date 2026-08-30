@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include<list>
+#include <set>
 std::vector<QuadItem*> reduceUnusedSymbol(std::vector<QuadItem* > quad_list){
     int len = quad_list.size();
     int i=0;
@@ -770,7 +771,8 @@ InterCode:: InterCode(AbstractAstNode* root){
 void InterCode:: Root_Generate(){
     std::cout<<"Gen "<<root->content<<std::endl;
     Generate(this->root, this->rootTable);
-    // this->quad_list = reduceUnusedSymbol(this->quad_list);
+    // 阶段6：四元式级优化（常量折叠/死代码消除/不可达删除）
+    this->optimize();
     int len = this->quad_list.size();
     int i=0;
     while(i < len){
@@ -1643,4 +1645,171 @@ void InterCode::backpatch(std::list<int> *backList, int target)
         quad_list[*it]->backpatch(target);
     }
     return;
+}
+
+// ==================== 阶段6：代码优化 ====================
+// 四元式级优化（Root_Generate 生成后、打印与汇编生成前调用）：
+//   1. 常量折叠：t := c1 op c2（纯常量算术）→ t := c
+//   2. 死代码消除：结果变量（含临时变量）后续无引用的赋值/运算删除（迭代）
+//   3. 不可达删除：RETURN/JUMP 之后、未被任何跳转引用的指令删除（迭代）
+// 每轮删除后统一重映射 JUMP 系列四元式的 result.target（四元式行号索引）
+static bool isJumpOp(OpType op){
+    return op==OpType::JUMP||op==OpType::JUMP_LT||op==OpType::JUMP_LE||
+           op==OpType::JUMP_GT||op==OpType::JUMP_GE||op==OpType::JUMP_EQ||
+           op==OpType::JUMP_NE;
+}
+static bool isDeletableDefOp(OpType op){
+    return op==OpType::assign||op==OpType::addtion||op==OpType::substract||
+           op==OpType::multiply||op==OpType::divide||op==OpType::mod||
+           op==OpType::power||op==OpType::uminus||op==OpType::logic_and||
+           op==OpType::logic_or||op==OpType::logic_not;
+}
+// 该四元式是否为“可删除的赋值/运算”（写目标不是解引用/数组元素/取地址等副作用形式）
+static bool isDeletableDef(QuadItem* q){
+    if(q->result.var == NULL) return false;
+    if(!isDeletableDefOp(q->op)) return false;
+    std::string rn = q->result.var->getIDName();
+    if(rn.empty()) return false;
+    if(rn[0]=='*' || rn[0]=='&') return false;
+    if(rn.find('[') != std::string::npos) return false;
+    return true;
+}
+// 收集该四元式“引用”的符号名（use，含内嵌引用如 a[t0] / &a / *p）
+static void collectUse(QuadItem* q, std::vector<std::string>& used){
+    OpType op = q->op;
+    int t = q->quad_item_type;
+    if(isJumpOp(op)){
+        if(t==1 || t==3){ if(q->arg1.var) used.push_back(q->arg1.var->getIDName()); }
+        if(t==2 || t==3){ if(q->arg2.var) used.push_back(q->arg2.var->getIDName()); }
+        return;
+    }
+    if(op==OpType::PRINT || op==OpType::PARAM || op==OpType::RETURN_OP){
+        if(q->result.var) used.push_back(q->result.var->getIDName());
+        return;
+    }
+    if(op==OpType::CALL || op==OpType::SCAN ||
+       op==OpType::FUNC_LABEL || op==OpType::FUNC_END) return;
+    // 副作用写目标（解引用/数组元素等，不可删除）：其符号名内嵌的变量属于使用
+    if(q->result.var){
+        std::string rn = q->result.var->getIDName();
+        if(!rn.empty() && (rn[0]=='*' || rn[0]=='&' || rn.find('[')!=std::string::npos)){
+            used.push_back(rn);
+        }
+    }
+    switch(t){
+        case 5: case 7: if(q->arg1.var) used.push_back(q->arg1.var->getIDName()); break;
+        default: break;
+    }
+    switch(t){
+        case 6: case 7: if(q->arg2.var) used.push_back(q->arg2.var->getIDName()); break;
+        default: break;
+    }
+}
+// 变量名 v 是否被任一引用符号名包含（含匹配；误报只会少删，安全）
+static bool isNameUsed(const std::vector<std::string>& used, const std::string& v){
+    if(v.empty()) return true;
+    for(size_t k=0;k<used.size();k++){
+        if(used[k].find(v) != std::string::npos) return true;
+    }
+    return false;
+}
+void InterCode::optimize(){
+    // ---------- pass 1：常量折叠 ----------
+    for(size_t i=0;i<quad_list.size();i++){
+        QuadItem* q = quad_list[i];
+        if(q->quad_item_type != 4) continue;
+        OpType op = q->op;
+        if(op==OpType::addtion||op==OpType::substract||op==OpType::multiply||
+           op==OpType::divide||op==OpType::mod||op==OpType::power){
+            int c1 = q->arg1.target, c2 = q->arg2.target;
+            if((op==OpType::divide||op==OpType::mod) && c2==0) continue; // 除零不折叠
+            if(op==OpType::power && c2<1) continue;  // 汇编 pow_i_i 对指数0语义特殊，跳过
+            long long v=0;
+            switch(op){
+                case OpType::addtion:  v=(long long)c1+c2; break;
+                case OpType::substract:v=(long long)c1-c2; break;
+                case OpType::multiply: v=(long long)c1*c2; break;
+                case OpType::divide:   v=c1/c2; break;
+                case OpType::mod:      v=c1%c2; break;
+                case OpType::power:    { long long r=1; for(int k=0;k<c2;k++) r*=(long long)c1; v=r; break; }
+                default: break;
+            }
+            Symbol* re = q->result.var;
+            quad_list[i] = new QuadItem(re, OpType::assign, (int)v); // t := c（type 6）
+        }
+    }
+    // ---------- pass 2/3：死代码消除 + 不可达删除（迭代至稳定） ----------
+    while(true){
+        // 跳转目标集合：被引用的行号指令绝不删除
+        std::set<int> targets;
+        for(size_t i=0;i<quad_list.size();i++){
+            if(isJumpOp(quad_list[i]->op)) targets.insert(quad_list[i]->result.target);
+        }
+        // 可达性分析（从每个 FUNC_LABEL 函数入口开始）
+        std::vector<bool> reachable(quad_list.size(), false);
+        std::stack<int> work;
+        for(size_t i=0;i<quad_list.size();i++){
+            if(quad_list[i]->op==OpType::FUNC_LABEL) work.push((int)i);
+        }
+        while(!work.empty()){
+            int i=work.top(); work.pop();
+            if(i<0||(size_t)i>=quad_list.size()||reachable[i]) continue;
+            reachable[i]=true;
+            OpType op = quad_list[i]->op;
+            if(op==OpType::JUMP){
+                int t=quad_list[i]->result.target;
+                if(t>=0 && (size_t)t<quad_list.size() && !reachable[t]) work.push(t);
+            } else if(op==OpType::JUMP_LT||op==OpType::JUMP_LE||op==OpType::JUMP_GT||
+                      op==OpType::JUMP_GE||op==OpType::JUMP_EQ||op==OpType::JUMP_NE){
+                if(i+1<(int)quad_list.size() && !reachable[i+1]) work.push(i+1);
+                int t=quad_list[i]->result.target;
+                if(t>=0 && (size_t)t<quad_list.size() && !reachable[t]) work.push(t);
+            } else if(op==OpType::RETURN_OP){
+                // return 后不继续顺序执行
+            } else {
+                if(i+1<(int)quad_list.size() && !reachable[i+1]) work.push(i+1);
+            }
+        }
+        // 收集可达指令的 use 符号名（不可达指令的 use 不计）
+        std::vector<std::string> used;
+        for(size_t i=0;i<quad_list.size();i++){
+            if(!reachable[i]) continue;
+            collectUse(quad_list[i], used);
+        }
+        // 标记删除
+        std::vector<bool> del(quad_list.size(), false);
+        bool changed=false;
+        for(size_t i=0;i<quad_list.size();i++){
+            QuadItem* q = quad_list[i];
+            if(!reachable[i]){
+                // 不可达：保留函数边界与跳转目标，其余删除
+                if(q->op!=OpType::FUNC_LABEL && q->op!=OpType::FUNC_END &&
+                   targets.count((int)i)==0){
+                    del[i]=true; changed=true;
+                }
+                continue;
+            }
+            if(targets.count((int)i)) continue;   // 跳转目标保护
+            if(!isDeletableDef(q)) continue;
+            std::string dn = q->result.var->getIDName();
+            if(!isNameUsed(used, dn)){            // 结果无任何引用 → 死代码
+                del[i]=true; changed=true;
+            }
+        }
+        if(!changed) break;
+        // 重建列表 + 重映射跳转目标
+        std::vector<int> remap(quad_list.size(), -1);
+        std::vector<QuadItem*> newList;
+        for(size_t i=0;i<quad_list.size();i++){
+            if(!del[i]){ remap[i]=(int)newList.size(); newList.push_back(quad_list[i]); }
+        }
+        for(size_t i=0;i<newList.size();i++){
+            QuadItem* q = newList[i];
+            if(isJumpOp(q->op)){
+                int t=q->result.target;
+                if(t>=0 && (size_t)t<remap.size() && remap[t]>=0) q->result.target=remap[t];
+            }
+        }
+        quad_list = newList;
+    }
 }

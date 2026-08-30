@@ -1,14 +1,16 @@
 #!/bin/bash
-# 中间代码验收（T4）：正常编译模式，检查四元式序列关键指令
-# 用法: run_intercode_test.sh <compiler> <test_dir>
-# 约定：T4-*.c 合法程序（rc=0）；T4-*.expect 每行一个必含子串（grep -F）
+# 中间代码验收（T4/T6）：正常编译模式，检查四元式序列关键指令
+# 用法: run_intercode_test.sh <compiler> <test_dir> [pattern]
+# 约定：T4-*.c / T6-*.c 合法程序（rc=0）；
+#       expect 每行一个断言：普通行必含子串（grep -F）；"!" 前缀行必不含（阶段6优化验证）
 set -u
 COMPILER="$1"
 TESTDIR="$2"
+PATTERN="${3:-T[46]-*.c}"
 pass=0
 fail=0
 
-for f in "$TESTDIR"/T4-*.c; do
+for f in "$TESTDIR"/$PATTERN; do
     name=$(basename "$f" .c)
     outfile="/tmp/intercode_out.$$"
     errfile="/tmp/intercode_err.$$"
@@ -23,7 +25,13 @@ for f in "$TESTDIR"/T4-*.c; do
     ok=1
     while IFS= read -r sub; do
         [ -z "$sub" ] && continue
-        if ! grep -qF "$sub" "$outfile"; then
+        if [ "${sub:0:1}" = "!" ]; then
+            neg="${sub:1}"
+            if grep -qF "$neg" "$outfile"; then
+                echo "FAIL $name: 四元式不应出现 [$neg]"
+                ok=0
+            fi
+        elif ! grep -qF "$sub" "$outfile"; then
             echo "FAIL $name: 四元式缺少 [$sub]"
             ok=0
         fi
