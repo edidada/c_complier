@@ -42,6 +42,7 @@ set(SOURCES
         intermidiate_code/interCode.cpp
         asm/AsmGenerate.cpp
         semantic/semantic.cpp
+        error_report/error_report.cpp
 )
 
 # 头文件目录
@@ -52,6 +53,7 @@ include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/intermidiate_code
         ${CMAKE_CURRENT_SOURCE_DIR}/asm
         ${CMAKE_CURRENT_SOURCE_DIR}/semantic
+        ${CMAKE_CURRENT_SOURCE_DIR}/error_report
 )
 
 # ==================== Flex + Bison ====================
@@ -253,3 +255,9 @@ add_test(NAME asm_suite COMMAND bash
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asm_test.sh
         $<TARGET_FILE:scanner_parser_test>
         ${CMAKE_CURRENT_SOURCE_DIR}/test_asm)
+
+# ==================== CTest 错误分析测试 (T7) ====================
+add_test(NAME error_suite COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_error_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_error)

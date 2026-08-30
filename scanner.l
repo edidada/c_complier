@@ -9,14 +9,31 @@ CONST_INT (([1-9]){DIGIT}*)|0
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include "parser.tab.h"
+#include "error_report.h"
 
 /* ===== 词法分析模式（--lex）=====
  * 供 parser.y main 的 "--lex" 分支使用：输出 单词/词素/属性 三列，
  * 对照《词法分析器上机要求》样例格式。
  */
 int lex_only_mode = 0;
-static int lex_errors = 0;
+
+/* ===== 阶段7：列号跟踪 =====
+ * flex 不直接提供列号，用 YY_USER_ACTION 在每次匹配后维护：
+ * lex_col 为扫描游标列号，lex_tok_col 为当前 token 起始列号（报错定位用）。
+ */
+static int lex_col = 1;
+static int lex_tok_col = 1;
+#define YY_USER_ACTION update_lex_column();
+static void update_lex_column(void) {
+    lex_tok_col = lex_col;
+    for (int i = 0; i < yyleng; ++i) {
+        if (yytext[i] == '\n') lex_col = 1;
+        else lex_col++;
+    }
+}
+int lexCurrentCol(void) { return lex_tok_col; }
 
 static const char* lex_token_name(int tok, const char* lexeme);
 static void lex_emit(int tok, const char* lexeme);
@@ -55,8 +72,8 @@ static void lex_emit(int tok, const char* lexeme);
     /* 整数溢出检查：超出 int 范围时报词法错误（不中断扫描） */
     long v = strtol(yytext, NULL, 10);
     if (v > 2147483647L) {
-        fprintf(stderr, "词法错误 第%d行: 整数常量溢出 '%s' (超出 int 范围)\n", yylineno, yytext);
-        lex_errors++;
+        lexReportError(yylineno, lex_tok_col,
+                       std::string("整数常量溢出 '") + yytext + "' (超出 int 范围)");
     }
     yylval.str = strdup(yytext);
     return CONST;
@@ -83,8 +100,7 @@ static void lex_emit(int tok, const char* lexeme);
 
 "/*"([^*]|\*+[^*/])*\*+"/"    { /* 完整块注释：跳过 */ }
 "/*" {
-    fprintf(stderr, "词法错误 第%d行: 未闭合的块注释\n", yylineno);
-    lex_errors++;
+    lexReportError(yylineno, lex_tok_col, "未闭合的块注释");
     /* 丢弃行尾剩余内容，避免其余字符被逐字节报为非法 */
     int c;
     while ((c = yyinput()) != EOF && c != '\n') { }
@@ -94,8 +110,7 @@ static void lex_emit(int tok, const char* lexeme);
 {WHITE_SPACE} { /* 忽略空白 */ }
 . {
     /* 非法字符：报错并继续扫描 */
-    fprintf(stderr, "词法错误 第%d行: 非法字符 '%s'\n", yylineno, yytext);
-    lex_errors++;
+    lexReportError(yylineno, lex_tok_col, std::string("非法字符 '") + yytext + "'");
 }
 %%
 

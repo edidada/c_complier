@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "../error_report/error_report.h"
+
 /*
  * ============ 类型系统（03_详细设计 5.1） ============
  * Type ::= int | int* | int[] | void | function(ret, args...)
@@ -39,6 +41,8 @@ struct VarSym {
     std::string name;
     TypeInfo type;
     int line;
+    bool used;     /* 阶段7：是否被引用（未使用检查） */
+    bool isParam;  /* 阶段7：函数形参（跳过未使用警告） */
 };
 
 /* 函数符号（签名）：用于实参个数/类型与返回类型检查 */
@@ -107,7 +111,18 @@ static bool compatible(const TypeInfo& a, const TypeInfo& b) {
 /* ============ 作用域 ============ */
 static void pushScope() { g_scope.push_back(new std::map<std::string, VarSym>()); }
 static void popScope() {
-    if (!g_scope.empty()) { delete g_scope.back(); g_scope.pop_back(); }
+    if (!g_scope.empty()) {
+        /* 阶段7：作用域弹出时报告从未使用的变量（形参除外） */
+        std::map<std::string, VarSym>& m = *g_scope.back();
+        for (std::map<std::string, VarSym>::iterator it = m.begin(); it != m.end(); ++it) {
+            if (!it->second.used && !it->second.isParam) {
+                semanticReportWarning(it->second.line,
+                                      "变量 '" + it->second.name + "' 已声明但从未使用");
+            }
+        }
+        delete g_scope.back();
+        g_scope.pop_back();
+    }
 }
 static void insertVar(const VarSym& s) {
     if (!g_scope.empty()) (*g_scope.back())[s.name] = s;
@@ -176,6 +191,8 @@ static void collectParams(AbstractAstNode* vl, std::vector<TypeInfo>& params, bo
             s.name = nameFromParam(p);
             s.type = typeFromParam(p);
             s.line = findLine(p);
+            s.used = false;
+            s.isParam = true;  /* 形参不参与未使用检查 */
             insertVar(s);
         }
     } else if (vl->content == "Some_Param") {
@@ -189,6 +206,8 @@ static void collectParams(AbstractAstNode* vl, std::vector<TypeInfo>& params, bo
                 s.name = nameFromParam(last);
                 s.type = typeFromParam(last);
                 s.line = findLine(last);
+                s.used = false;
+                s.isParam = true;  /* 形参不参与未使用检查 */
                 insertVar(s);
             }
         }
@@ -228,6 +247,8 @@ static TypeInfo checkVardef(AbstractAstNode* vd, const TypeInfo& base) {
     s.name = name;
     s.type = t;
     s.line = findLine(id);
+    s.used = false;
+    s.isParam = false;
     insertVar(s);
     return t;
 }
@@ -281,6 +302,7 @@ static TypeInfo checkExp(AbstractAstNode* n) {
                 semErr(findLine(id), "变量 '" + id->content + "' 未声明");  // R1
                 return TypeInfo();
             }
+            s->used = true;  /* 阶段7：变量被引用 */
             return s->type;
         }
         return TypeInfo();
@@ -416,6 +438,7 @@ static TypeInfo checkExp(AbstractAstNode* n) {
                 semErr(findLine(id), "变量 '" + id->content + "' 未声明");
                 return TypeInfo();
             }
+            s->used = true;  /* 阶段7：数组/指针元素访问视为使用 */
             if (!(s->type.isArray() || s->type.isPtr())) {  // C5
                 semErr(findLine(n), "下标操作数不是数组/指针（'" + id->content + "' 是 " + s->type.name() + "）");
                 return TypeInfo();
@@ -431,6 +454,7 @@ static TypeInfo checkExp(AbstractAstNode* n) {
                 semErr(findLine(id), "变量 '" + id->content + "' 未声明");
                 return TypeInfo();
             }
+            s->used = true;  /* 阶段7：取地址视为使用 */
             return TypeInfo(TK_PTR);
         }
 
@@ -442,6 +466,7 @@ static TypeInfo checkExp(AbstractAstNode* n) {
                 semErr(findLine(id), "变量 '" + id->content + "' 未声明");
                 return TypeInfo();
             }
+            s->used = true;  /* 阶段7：解引用视为使用 */
             if (!(s->type.isPtr() || s->type.isArray())) {
                 semErr(findLine(n), "解引用操作数不是指针（'" + id->content + "' 是 " + s->type.name() + "）");
                 return TypeInfo();
@@ -534,8 +559,13 @@ static void checkStmt(AbstractAstNode* n) {
         checkExp(n->getFirstChild());
     } else if (c == "scanf_id") {
         AbstractAstNode* id = n->getFirstChild();
-        if (id != NULL && lookup(id->content) == NULL) {
-            semErr(findLine(id), "变量 '" + id->content + "' 未声明");
+        if (id != NULL) {
+            VarSym* s = lookup(id->content);
+            if (s == NULL) {
+                semErr(findLine(id), "变量 '" + id->content + "' 未声明");
+            } else {
+                s->used = true;  /* 阶段7：scanf 目标变量视为使用 */
+            }
         }
     }
     /* Break/Continue/Recover 节点：无需检查 */
@@ -673,7 +703,7 @@ int typeCheck(AbstractAstNode* root) {
 
     if (!g_errors.empty()) {
         for (size_t i = 0; i < g_errors.size(); ++i) {
-            fprintf(stderr, "[语义错误] %s\n", g_errors[i].c_str());
+            semanticReportErrorStr(g_errors[i]);  /* 阶段7：统一报告与统计 */
         }
     }
     return (int)g_errors.size();

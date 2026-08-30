@@ -9,11 +9,13 @@
 #include "./intermidiate_code/interCode.h"
 #include "./asm/AsmGenerate.h"
 #include "./semantic/semantic.h"
+#include "./error_report/error_report.h"
 extern char *yytext;
 extern int yylex();
 extern void yyerror(const char* s);
 extern FILE * yyin;
 extern int yylineno;
+extern int lexCurrentCol(void); /* 阶段7：当前 token 起始列号（scanner.l） */
 int syntax_error_count = 0; /* 语法错误计数（超限终止） */
 AbstractAstNode* root;
 std::stack<SymbolTable*> SymbolTableList;
@@ -822,7 +824,8 @@ int  main(int argc, char** argv)
     }
     printf("%-10s %-8s %s\n", "单词", "词素", "属性");
     while ( yylex_dump() != 0 ) { }
-    return 0;
+    printErrorSummary(); /* 阶段7：统一错误统计摘要 */
+    return (errorTotal() > 0) ? 1 : 0;
   }
   if ( argc > 1 && strcmp(argv[1], "--parse-only") == 0 ) {
     /* ===== 语法分析模式：--parse-only [文件] =====
@@ -839,6 +842,7 @@ int  main(int argc, char** argv)
     do {
       yyparse();
     } while(!feof(yyin));
+    printErrorSummary(); /* 阶段7：统一错误统计摘要 */
     return (syntax_error_count > 0) ? 1 : 0;
   }
   if ( argc > 1 ) {
@@ -856,12 +860,14 @@ int  main(int argc, char** argv)
   if (syntax_error_count > 0) {
     /* 有语法错误时不生成中间代码/汇编，避免空 AST 崩溃 */
     fprintf(stderr, "语法分析失败，跳过中间代码与汇编生成\n");
+    printErrorSummary(); /* 阶段7：统一错误统计摘要 */
     return 1;
   }
   /* ===== 语义分析（阶段3）：有语义错误则不生成中间代码/汇编 ===== */
   int sem_err_count = typeCheck(root);
   if (sem_err_count > 0) {
     fprintf(stderr, "编译完成：%d 个语义错误\n", sem_err_count);
+    printErrorSummary(); /* 阶段7：统一错误统计摘要 */
     return 1;
   }
   InterCode interCode = InterCode(root);
@@ -872,13 +878,14 @@ int  main(int argc, char** argv)
   AsmGenerate* asmgenerate = new AsmGenerate(interCode.getQuadlist(),  interCode.getTable());
   
   asmgenerate->generate();
+  printErrorSummary(); /* 阶段7：统一错误统计摘要（无错不输出） */
   return 0;
 
 }
 
 void yyerror(const char *s)
 {
-  fprintf(stderr, "语法错误 第%d行: %s\n", yylineno, s);
+  syntaxReportError(yylineno, lexCurrentCol(), s);
   if (++syntax_error_count >= 20) {
     fprintf(stderr, "语法错误过多(>=20)，终止编译\n");
     exit(1);
