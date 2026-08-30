@@ -30,6 +30,8 @@ enum  OpType{
     RETURN_OP,
     PRINT,
     SCAN,
+    PARAM,   // 函数实参传递（阶段4新增）
+    CALL,    // 函数调用 CALL f, n（阶段4新增）
     // array_assign,
 
 };
@@ -96,6 +98,8 @@ public:
     SymbolTable* Body_Generate(AbstractAstNode* node, SymbolTable* symbol_table);
     void Generate(AbstractAstNode* node, SymbolTable* symbol_tabl);
     void Root_Generate();
+    // 递归收集函数实参（生成 PARAM 指令），count 累计实参个数（阶段4新增）
+    void GenCallArgs(AbstractAstNode* node, SymbolTable* symbol_table, int& count);
     int getFalseJump(int i);
     void addItem(QuadItem* item);
     void showList();

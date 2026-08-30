@@ -1,0 +1,2 @@
+PARAM a
+CALL f, 1

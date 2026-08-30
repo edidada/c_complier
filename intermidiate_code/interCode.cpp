@@ -714,6 +714,33 @@ void QuadItem:: printItemInfor(int i)
         <<"print_int "
         <<this->result.var->getIDName()<<std::endl;
     break;
+    case RETURN_OP:
+        if(type == 10){
+            std::cout<<"L"<<i<<":  "
+            <<"RETURN "
+            <<this->result.var->getIDName()<<std::endl;
+        }else{
+            std::cout<<"L"<<i<<":  "
+            <<"RETURN"<<std::endl;
+        }
+    break;
+    case SCAN:
+        std::cout<<"L"<<i<<":  "
+        <<"SCAN "
+        <<this->result.var->getIDName()<<std::endl;
+    break;
+    case PARAM:
+        std::cout<<"L"<<i<<":  "
+        <<"PARAM "
+        <<this->result.var->getIDName()<<std::endl;
+    break;
+    case CALL:
+        std::cout<<"L"<<i<<":  "
+        <<"CALL "
+        <<this->arg1.var->getIDName()
+        <<", "
+        <<this->result.target<<std::endl;
+    break;
     
     default:
     //    std::cout<<"\033[31m Error! No such quad! \033[0m"<<std::endl;
@@ -1114,6 +1141,16 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
                         this->quad_list.push_back(quad);
                     }
                 }
+                else{
+                    // 通用函数调用：依次生成 PARAM 实参，再生成 CALL f, n（阶段4新增）
+                    std::string fname = child->content;
+                    Symbol* func_sym = new Symbol(fname, SymbolType::var, 0);
+                    int param_count = 0;
+                    AbstractAstNode* argNode = child->getNextSibling();
+                    GenCallArgs(argNode, symbol_table, param_count);
+                    QuadItem* call_quad = new QuadItem(param_count, OpType::CALL, func_sym, 0);
+                    this->quad_list.push_back(call_quad);
+                }
             }
         }
             break;
@@ -1141,6 +1178,27 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
         break;
     }
     return nullptr;
+}
+
+// 递归展开实参链（Func_Single_Arg / Func_Some_Args），按源顺序生成 PARAM 指令（阶段4新增）
+void InterCode:: GenCallArgs(AbstractAstNode* node, SymbolTable* symbol_table, int& count){
+    if(node == NULL) return;
+    if(node->content == "Func_Single_Arg"){
+        Symbol* param = Exp_Stmt_Generate(node->getFirstChild(), symbol_table);
+        if(param != NULL){
+            QuadItem* quad = new QuadItem(param, OpType::PARAM);
+            this->quad_list.push_back(quad);
+            count++;
+        }
+    }
+    else if(node->content == "Func_Some_Args"){
+        AbstractAstNode* inner = node->getFirstChild();                     // 内层 Args 链
+        GenCallArgs(inner, symbol_table, count);                            // 先内层（源顺序）
+        AbstractAstNode* tail = inner ? inner->getNextSibling() : NULL;     // 尾部实参
+        if(tail != NULL){
+            GenCallArgs(tail, symbol_table, count);
+        }
+    }
 }
 
 SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbol_table){
@@ -1295,8 +1353,28 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
             }
             else if(node_content == "Return_Exp"){
                 AbstractAstNode *child=node->getFirstChild();
-                Exp_Stmt_Generate(child,symbol_table);
-
+                Symbol* ret_val = Exp_Stmt_Generate(child,symbol_table);
+                if(ret_val != NULL){
+                    QuadItem* quad = new QuadItem(ret_val, OpType::RETURN_OP);
+                    this->quad_list.push_back(quad);
+                }
+            }
+            else if(node_content == "Return_Void"){
+                QuadItem* quad = new QuadItem((int)0, OpType::RETURN_OP);
+                this->quad_list.push_back(quad);
+            }
+            else if(node_content == "scanf_id"){
+                AbstractAstNode* idNode = node->getFirstChild();
+                if(idNode != NULL){
+                    Symbol* var = symbol_table->findSymbolLocally(idNode->content);
+                    if(var == NULL){
+                        var = symbol_table->findSymbolGlobally(idNode->content);
+                    }
+                    if(var != NULL){
+                        QuadItem* quad = new QuadItem(var, OpType::SCAN);
+                        this->quad_list.push_back(quad);
+                    }
+                }
             }
 
         }
