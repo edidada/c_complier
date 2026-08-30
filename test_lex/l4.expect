@@ -1,0 +1,10 @@
+ID a
+EQUAL ==
+ID b
+AND &&
+NOT !
+ID c
+OR ||
+ID d
+GREATER_EQUAL >=
+ID e

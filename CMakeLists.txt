@@ -221,3 +221,9 @@ add_test(NAME e2e_test6 COMMAND bash
         $<TARGET_FILE:scanner_parser_test>
         ${CMAKE_CURRENT_SOURCE_DIR}/test_code/test6.c
         "1")
+
+# ==================== CTest 词法测试 (T1) ====================
+add_test(NAME lex_suite COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_lex_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_lex)

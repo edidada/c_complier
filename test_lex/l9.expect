@@ -1,0 +1,6 @@
+TYPE int
+ID a
+ASSIGN =
+NUMBER 12
+ID abc
+SEMICOLON ;

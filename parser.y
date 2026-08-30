@@ -2,6 +2,7 @@
 #include "./abstract_syntax_tree/AstNode.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <iostream>
 #include <stack>
 #include "./symbol_table/symbol.h"
@@ -739,6 +740,25 @@ IDList:
 %%
 int  main(int argc, char** argv)
 {
+  extern int lex_only_mode;
+  extern int yylex_dump(void);
+  /* ===== 词法分析模式：--lex [文件] =====
+   * 仅做词法分析，输出 单词/词素/属性 三列（对照《词法分析器上机要求》）
+   */
+  if ( argc > 1 && strcmp(argv[1], "--lex") == 0 ) {
+    lex_only_mode = 1;
+    if ( argc > 2 ) {
+      if (! (yyin = fopen(argv[2], "r" ) )){
+        perror(argv[2]);
+        return 1;
+      }
+    } else {
+      yyin = stdin;
+    }
+    printf("%-10s %-8s %s\n", "单词", "词素", "属性");
+    while ( yylex_dump() != 0 ) { }
+    return 0;
+  }
   if ( argc > 1 ) {
     if (! (yyin = fopen(argv[1], "r" ) )){
       perror(argv[1]);

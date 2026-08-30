@@ -1,0 +1,12 @@
+FOR for
+LP (
+TYPE int
+ID i
+ASSIGN =
+NUMBER 0
+SEMICOLON ;
+ID i
+LESS <
+NUMBER 3
+SEMICOLON ;
+RP )

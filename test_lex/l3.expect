@@ -1,0 +1,11 @@
+ID a
+ADD +
+ID b
+MUL *
+LP (
+ID c
+SUB -
+NUMBER 1
+RP )
+POW ^
+NUMBER 2
