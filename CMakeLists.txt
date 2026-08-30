@@ -116,19 +116,31 @@ target_include_directories(scanner_parser_test PRIVATE
 # 编译 asm_io.asm → asm_io.o (NASM, ELF32)
 add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/asm_io.o
-        COMMAND ${NASM_EXECUTABLE} -g -f elf32
+        COMMAND ${NASM_EXECUTABLE} -g -f elf32 -d ELF_TYPE
         ${CMAKE_CURRENT_SOURCE_DIR}/asm/asm_io.asm
         -o ${CMAKE_CURRENT_BINARY_DIR}/asm_io.o
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/asm/asm_io.asm
         COMMENT "Assembling asm_io.asm → asm_io.o"
 )
 
+# 编译 test.asm → test.o (NASM, ELF32)
+add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/test.o
+        COMMAND ${NASM_EXECUTABLE} -g -f elf32 -d ELF_TYPE -i ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/asm/test.asm
+        -o ${CMAKE_CURRENT_BINARY_DIR}/test.o
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/asm/test.asm
+        COMMENT "Assembling test.asm → test.o"
+)
+
 # 生成 test 可执行文件（32位）
 add_custom_target(test_executable ALL
-        COMMAND gcc -g -m32
+        COMMAND gcc -g -m32 -no-pie
         ${CMAKE_CURRENT_BINARY_DIR}/asm_io.o
+        ${CMAKE_CURRENT_BINARY_DIR}/test.o
         -o ${CMAKE_CURRENT_BINARY_DIR}/test
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/asm_io.o
+        ${CMAKE_CURRENT_BINARY_DIR}/test.o
         COMMENT "Linking 32-bit test executable"
 )
 

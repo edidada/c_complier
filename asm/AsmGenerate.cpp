@@ -1035,8 +1035,8 @@ void AsmGenerate::generate()
     this->asmcode.addCode("pop ebx\nret\n");
     //write to asm
     
-    std::ofstream out("asm/asm_io.asm",ios::app);
-    out<<(out,this->asmcode);
+    std::ofstream out("asm/test.asm");
+    out << "%include \"asm/aso_io.inc\"\n" << (out, this->asmcode);
     std::cout<<"write ok!!\n";
     out.close();
 }
