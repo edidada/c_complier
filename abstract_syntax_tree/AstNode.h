@@ -44,6 +44,7 @@ public:
     int getDepth();
     void setDepth(int newDepth);
     bool isVisited = false;
+    int line = 0;  // 源文件行号（语义错误定位，T3）
     void printNodeInfo();
 };
 void printAst(AbstractAstNode* Root);

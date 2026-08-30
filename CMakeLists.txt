@@ -41,6 +41,7 @@ set(SOURCES
         symbol_table/symbol.cpp
         intermidiate_code/interCode.cpp
         asm/AsmGenerate.cpp
+        semantic/semantic.cpp
 )
 
 # 头文件目录
@@ -50,6 +51,7 @@ include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/symbol_table
         ${CMAKE_CURRENT_SOURCE_DIR}/intermidiate_code
         ${CMAKE_CURRENT_SOURCE_DIR}/asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/semantic
 )
 
 # ==================== Flex + Bison ====================
@@ -233,3 +235,9 @@ add_test(NAME parse_suite COMMAND bash
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_parse_test.sh
         $<TARGET_FILE:scanner_parser_test>
         ${CMAKE_CURRENT_SOURCE_DIR}/test_parse)
+
+# ==================== CTest 语义测试 (T3) ====================
+add_test(NAME semantic_suite COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_semantic_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_semantic)

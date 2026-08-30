@@ -8,6 +8,7 @@
 #include "./symbol_table/symbol.h"
 #include "./intermidiate_code/interCode.h"
 #include "./asm/AsmGenerate.h"
+#include "./semantic/semantic.h"
 extern char *yytext;
 extern int yylex();
 extern void yyerror(const char* s);
@@ -144,6 +145,7 @@ Vardef:
       // printf("vardef->identifier \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Block_Single_Vardef");
         AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $1);
+        var_node->line = yylineno;
         node->addFirstChild(var_node);
         $$ = node;
     }
@@ -152,7 +154,9 @@ Vardef:
     // printf("vardef->identifier[const] \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_id[const]");
         AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $3);
+        const_node->line = yylineno;
         AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $1);
+        var_node->line = yylineno;
         node->addFirstChild(var_node);
         var_node->addNextSibling(const_node);
         $$ = node;
@@ -169,6 +173,7 @@ Vardef:
     // printf("vardef->identifier[] \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_id[]");
         AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $1);
+        var_node->line = yylineno;
         node->addFirstChild(var_node);
         $$ = node;
     }
@@ -176,6 +181,7 @@ Vardef:
     // printf("vardef->*identifier \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::ARRAY,"array_*id");
         AbstractAstNode* var_node = new AbstractAstNode(AstNodeType::ID, $2);
+        var_node->line = yylineno;
         node->addFirstChild(var_node);
         $$ = node;
   }
@@ -193,6 +199,7 @@ Vardef:
       // printf("consts->const \n");
       AbstractAstNode* node = new AbstractAstNode(AstNodeType::EXPRESSION,"const_array");
       AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $1);
+      const_node->line = yylineno;
       node->addFirstChild(const_node);
       $$ = node;
 
@@ -224,6 +231,7 @@ Func:
       // printf("func->identfier() \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Func_NParam");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $1);
+        id_node->line = yylineno;
         node->addFirstChild(id_node);
         $$ = node;
     }
@@ -232,10 +240,9 @@ Func:
       // printf("func->identifier(varlist) \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Func_Params");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $1);
-        //node->addFirstChild(id_node);
-        /////////////////?
-        //$1->addNextSibling($3);
-        //id_node->addNextSibling($3);
+        id_node->line = yylineno;
+        node->addFirstChild(id_node);
+        id_node->addNextSibling($3);
         $$ = node;
     }
   ;
@@ -262,6 +269,7 @@ Param:
       // printf("param->descriptor identifier \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Param_ID");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $2);
+        id_node->line = yylineno;
         node->addFirstChild($1);
         $1->addNextSibling(id_node);
         $$ = node;
@@ -270,6 +278,7 @@ Param:
       // printf("param->descriptor identifier[] \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Param_ID[]");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $2);
+        id_node->line = yylineno;
         node->addFirstChild($1);
         $1->addNextSibling(id_node);
         $$ = node;
@@ -278,7 +287,9 @@ Param:
       // printf("param->descriptor identifier[const] \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Param_ID[const]");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $2);
+        id_node->line = yylineno;
         AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $4);
+        const_node->line = yylineno;
         node->addFirstChild($1);
         $1->addNextSibling(id_node);
         id_node->addNextSibling(const_node);
@@ -362,6 +373,7 @@ Stmt:
   | RETURN Exp SEMI{
     // printf("stmt->return exp ; \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"Return_Exp");
+        node->line = yylineno;
         // AbstractAstNode* return_node = new AbstractAstNode(AstNodeType::RETURN,$1);
         // node->addFirstChild(return_node);
         // $1->addNextSibling($2);
@@ -371,6 +383,7 @@ Stmt:
   | RETURN SEMI{
     // printf("stmt->return ; \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"Return_Void");
+        node->line = yylineno;
         // AbstractAstNode* return_node = new AbstractAstNode(AstNodeType::RETURN,$1);
         // node->addFirstChild(return_node);
         $$ = node;
@@ -476,6 +489,7 @@ Stmt:
   | SCANF'('IDENTIFIER')' SEMI{
       AbstractAstNode* node = new AbstractAstNode(AstNodeType::STATEMENT,"scanf_id");
       AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $3);
+      id_node->line = yylineno;
       node->addFirstChild(id_node);
       $$ = node;
 
@@ -583,6 +597,8 @@ Exp:
         // printf("exp->const \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::EXPRESSION,"Const_Exp");
         AbstractAstNode* const_node = new AbstractAstNode(AstNodeType::CONST_INT, $1);
+        const_node->line = yylineno;
+      const_node->line = yylineno;
         node->addFirstChild(const_node);
         $$ = node;
     }
@@ -590,6 +606,7 @@ Exp:
         // printf("exp->identfier \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::EXPRESSION,"ID_Exp");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $1);
+        id_node->line = yylineno;
         node->addFirstChild(id_node);
         $$ = node;
     }*/
@@ -718,6 +735,7 @@ Exp:
     // printf("exp->id '(' Args ')' \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::CALL, "Call_Args_Func");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $1);
+        id_node->line = yylineno;
         node->addFirstChild(id_node);
         id_node->addNextSibling($3);
         $$ = node;
@@ -726,6 +744,7 @@ Exp:
     // printf("exp->id '('  ')' \n");
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::CALL, "Call_NArgs_Func");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $1);
+        id_node->line = yylineno;
         node->addFirstChild(id_node);
         $$ = node;
     }
@@ -745,6 +764,7 @@ Exp:
   | SINGLAND IDENTIFIER {
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::OPERATION,"&id");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID, $2);
+        id_node->line = yylineno;
         node->addFirstChild(id_node);
         $$ = node;
     }
@@ -766,6 +786,7 @@ IDList:
     IDENTIFIER{
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Single_ID");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID,$1);
+        id_node->line = yylineno;
         node->addFirstChild(id_node);
         $$ = node;
 
@@ -773,6 +794,7 @@ IDList:
   | IDList IDENTIFIER{
         AbstractAstNode* node = new AbstractAstNode(AstNodeType::DEFINITION,"Single_ID");
         AbstractAstNode* id_node = new AbstractAstNode(AstNodeType::ID,$2);
+        id_node->line = yylineno;
         node->addFirstChild($1);
         $1->addNextSibling(id_node);
         $$ = node;
@@ -834,6 +856,12 @@ int  main(int argc, char** argv)
   if (syntax_error_count > 0) {
     /* 有语法错误时不生成中间代码/汇编，避免空 AST 崩溃 */
     fprintf(stderr, "语法分析失败，跳过中间代码与汇编生成\n");
+    return 1;
+  }
+  /* ===== 语义分析（阶段3）：有语义错误则不生成中间代码/汇编 ===== */
+  int sem_err_count = typeCheck(root);
+  if (sem_err_count > 0) {
+    fprintf(stderr, "编译完成：%d 个语义错误\n", sem_err_count);
     return 1;
   }
   InterCode interCode = InterCode(root);
