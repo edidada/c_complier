@@ -91,6 +91,17 @@ private:
     void preSetLabel();
     bool isJumpQuad(OpType code);
     void generateprint(QuadItem q);
+    // ===== 阶段5 新增：函数调用/返回/扫描/函数帧 =====
+    std::string currentFunc;   // 当前函数名（FUNC_LABEL 时更新，RETURN 跳转目标用）
+    void generateFuncLabel(QuadItem q);
+    void generateFuncEnd(QuadItem q);
+    void generateReturn(QuadItem q);
+    void generateParam(QuadItem q);
+    void generateCall(QuadItem q);
+    void generateScan(QuadItem q);
+    // ===== 阶段5 新增：数组变量索引（a[i]，i 为变量）=====
+    bool isVarIndex(const std::string& name);
+    void genArrayAddrIntoEdx(const std::string& name);
 public:
     Symbol* getoffsetofarray(Symbol* arg);
     AsmCode& getAsmCode() { return this->asmcode; }

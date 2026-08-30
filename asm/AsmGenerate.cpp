@@ -5,6 +5,45 @@
 AsmCode::AsmCode() {
 
 }
+// 判断字符串是否为整数常量（阶段5新增）
+static bool isNumStr(const std::string& s) {
+    if (s.empty()) return false;
+    size_t start = (s[0] == '-' || s[0] == '+') ? 1 : 0;
+    if (start == s.size()) return false;
+    for (size_t i = start; i < s.size(); ++i) {
+        if (!isdigit((unsigned char)s[i])) return false;
+    }
+    return true;
+}
+
+// 判断 "a[i]" 是否为变量索引（i 非整数常量）（阶段5新增）
+bool AsmGenerate::isVarIndex(const std::string& name) {
+    size_t lp = name.find("[");
+    if (lp == std::string::npos) return false;
+    size_t rp = name.find("]");
+    if (rp == std::string::npos) return false;
+    std::string idx = name.substr(lp + 1, rp - lp - 1);
+    return !isNumStr(idx);
+}
+
+// 计算 a[i]（i 为变量）的地址放入 edx：edx = ebp - base_offset + i*4（阶段5新增）
+void AsmGenerate::genArrayAddrIntoEdx(const std::string& name) {
+    size_t lp = name.find("[");
+    size_t rp = name.find("]");
+    std::string baseName = name.substr(0, lp);
+    std::string idxStr = name.substr(lp + 1, rp - lp - 1);
+    Symbol* baseSym = this->currentTable->findSymbolLocally(baseName);
+    if (baseSym == NULL) baseSym = this->currentTable->findSymbolGlobally(baseName);
+    Symbol* idxSym = this->currentTable->findSymbolLocally(idxStr);
+    if (idxSym == NULL) idxSym = this->currentTable->findSymbolGlobally(idxStr);
+    int baseOffset = baseSym->getSymOffset() - baseSym->getWidth() + 4;
+    this->asmcode.mov(asmRegister::ecx, this->asmcode.generateVar(idxSym->getSymOffset()));
+    this->asmcode.generateBinaryInstructor("imul", asmRegister::ecx, "4");
+    this->asmcode.mov(asmRegister::edx, asmRegister::ebp);
+    this->asmcode.sub(asmRegister::edx, std::to_string(baseOffset));
+    this->asmcode.sub(asmRegister::edx, asmRegister::ecx);
+}
+
 //get 2 value back:1.name 2.offset
 Symbol* AsmGenerate::getoffsetofarray(Symbol* arg)
 {
@@ -21,7 +60,7 @@ Symbol* AsmGenerate::getoffsetofarray(Symbol* arg)
         std::cout<<"\033[31m Error: Undefined array: \033[0m"<<firstname<<std::endl;
         return NULL;
     }
-    int base_offset =re->getSymOffset()-re->getWidth();
+    int base_offset =re->getSymOffset()-re->getWidth()+4;
     int total_offset=base_offset;
     //result.push_back(firstname);
     //std::cout<<"splited "<<splited_result<<"\n";
@@ -271,8 +310,79 @@ void AsmGenerate::generateArithmetic(QuadItem q) {
     {
         Symbol* result = q.getArg(3).var;
         string result_name=result->getIDName();
+        // ===== 阶段5：指针/函数返回值特判 =====
+        if (result_name[0] == '*') {
+            // *p := val（解引用写入）
+            this->asmcode.mov(asmRegister::edx, this->asmcode.generateVar(result->getSymOffset()));
+            if (flag == 7) {
+                Symbol* arg1 = q.getArg(1).var;
+                std::string tn = arg1->getIDName();
+                if (tn[0] == 't') {
+                    asmRegister r = this->findRegister(tn);
+                    this->asmcode.mov(asmRegister::eax, r);
+                    this->releaseRegister(r);
+                } else if (isNumStr(tn)) {
+                    this->asmcode.mov(asmRegister::eax, tn);
+                } else {
+                    this->asmcode.mov(asmRegister::eax, this->asmcode.generateVar(arg1->getSymOffset()));
+                }
+            } else {
+                this->asmcode.mov(asmRegister::eax, std::to_string(q.getArg(1).target));
+            }
+            this->asmcode.mov("dword[edx]", asmRegister::eax);
+            return;
+        }
+        if (flag == 7) {
+            Symbol* arg1 = q.getArg(1).var;
+            std::string arg1Name = arg1->getIDName();
+            if (arg1Name == "eax") {
+                // r := eax（函数返回值捕获）；结果为 temp 时存寄存器，否则存变量
+                if (result_name[0] == 't') {
+                    asmRegister reg = this->getRegister(result_name);
+                    this->asmcode.mov(reg, asmRegister::eax);
+                } else {
+                    this->asmcode.mov(this->asmcode.generateVar(result->getSymOffset()), asmRegister::eax);
+                }
+                return;
+            }
+            if (arg1Name[0] == '&') {
+                // p := &a（取地址：edx = ebp - a_offset）
+                this->asmcode.mov(asmRegister::edx, asmRegister::ebp);
+                this->asmcode.sub(asmRegister::edx, std::to_string(arg1->getSymOffset()));
+                this->asmcode.mov(this->asmcode.generateVar(result->getSymOffset()), asmRegister::edx);
+                return;
+            }
+            if (arg1Name[0] == '*') {
+                // b := *p（解引用读取）
+                this->asmcode.mov(asmRegister::edx, this->asmcode.generateVar(arg1->getSymOffset()));
+                this->asmcode.mov(asmRegister::eax, "dword[edx]");
+                this->asmcode.mov(this->asmcode.generateVar(result->getSymOffset()), asmRegister::eax);
+                return;
+            }
+        }
         if (result_name.find("[")<result_name.size())
         {
+            if (this->isVarIndex(result_name)) {
+                // a[i] := val（变量索引，阶段5新增）
+                this->genArrayAddrIntoEdx(result_name);
+                if (flag == 7) {
+                    Symbol* arg1 = q.getArg(1).var;
+                    std::string tn = arg1->getIDName();
+                    if (tn[0] == 't') {
+                        asmRegister r = this->findRegister(tn);
+                        this->asmcode.mov(asmRegister::eax, r);
+                        this->releaseRegister(r);
+                    } else if (isNumStr(tn)) {
+                        this->asmcode.mov(asmRegister::eax, tn);
+                    } else {
+                        this->asmcode.mov(asmRegister::eax, this->asmcode.generateVar(arg1->getSymOffset()));
+                    }
+                } else {
+                    this->asmcode.mov(asmRegister::eax, std::to_string(q.getArg(1).target));
+                }
+                this->asmcode.mov("dword[edx]", asmRegister::eax);
+                return;
+            }
             result=getoffsetofarray(result);
         }
 
@@ -284,6 +394,13 @@ void AsmGenerate::generateArithmetic(QuadItem q) {
             std::string tempVar = arg1->getIDName();
             if (tempVar.find("[")<tempVar.size())
         {
+            if (this->isVarIndex(tempVar)) {
+                // b := a[i]（变量索引读，阶段5新增）
+                this->genArrayAddrIntoEdx(tempVar);
+                this->asmcode.mov(asmRegister::eax, "dword[edx]");
+                this->asmcode.mov(result_ebp_offset, asmRegister::eax);
+                return;
+            }
             arg1=getoffsetofarray(arg1);
         }
             if (tempVar[0] == 't') 
@@ -821,10 +938,108 @@ void AsmGenerate::generatePower(QuadItem q) {
 void AsmGenerate::generateprint(QuadItem q)
 {
     Symbol* result = q.getArg(3).var;
-    int offset = result->getSymOffset();
-    std::string result_ebp_offset = this->asmcode.generateVar(offset);
-    this->asmcode.addCode("mov eax,"+result_ebp_offset+"\n");
+    std::string name = result->getIDName();
+    // 支持临时变量/数字常量/数组访问（阶段5增强）
+    if (name[0] == 't') {
+        asmRegister reg = this->findRegister(name);
+        this->asmcode.mov(asmRegister::eax, reg);
+        this->releaseRegister(reg);
+    } else if (isNumStr(name)) {
+        this->asmcode.mov(asmRegister::eax, name);
+    } else if (name.find("[") < name.size()) {
+        if (this->isVarIndex(name)) {
+            this->genArrayAddrIntoEdx(name);
+            this->asmcode.mov(asmRegister::eax, "dword[edx]");
+        } else {
+            Symbol* offSym = this->getoffsetofarray(result);
+            this->asmcode.mov(asmRegister::eax, this->asmcode.generateVar(offSym->getSymOffset()));
+        }
+    } else {
+        this->asmcode.mov(asmRegister::eax, this->asmcode.generateVar(result->getSymOffset()));
+    }
     this->asmcode.addCode("call print_int_i\n");
+}
+
+// ===== 阶段5：函数调用约定（32 位 cdecl）=====
+void AsmGenerate::generateFuncLabel(QuadItem q) {
+    std::string name = q.getArg(1).var->getIDName();
+    int size = q.result.target;
+    std::string label = (name == "main") ? "main" : ("label_" + name);
+    this->asmcode.label("\n" + label);
+    this->asmcode.push(asmRegister::ebp);
+    this->asmcode.mov(asmRegister::ebp, asmRegister::esp);
+    this->asmcode.sub(asmRegister::esp, std::to_string(size));
+    this->currentFunc = name;
+}
+
+void AsmGenerate::generateFuncEnd(QuadItem q) {
+    std::string name = q.result.var->getIDName();
+    std::string label = (name == "main") ? "main_end" : ("label_" + name + "_end");
+    this->asmcode.label("\n" + label);
+    this->asmcode.mov(asmRegister::esp, asmRegister::ebp);
+    this->asmcode.pop(asmRegister::ebp);
+    if (name == "main") {
+        // main 返回需置 eax=0，保证进程退出码为 0（供脚本/测试比对）
+        this->asmcode.mov(asmRegister::eax, "0");
+    }
+    this->asmcode.addCode("ret");
+}
+
+void AsmGenerate::generateReturn(QuadItem q) {
+    std::string endLabel = (this->currentFunc == "main") ? "main_end" : ("label_" + this->currentFunc + "_end");
+    int flag = q.getItemType();
+    if (flag == 10) {
+        Symbol* val = q.result.var;
+        std::string name = val->getIDName();
+        if (name[0] == 't') {
+            asmRegister reg = this->findRegister(name);
+            this->asmcode.mov(asmRegister::eax, reg);
+            this->releaseRegister(reg);
+        } else if (isNumStr(name)) {
+            this->asmcode.mov(asmRegister::eax, name);
+        } else {
+            this->asmcode.mov(asmRegister::eax, this->asmcode.generateVar(val->getSymOffset()));
+        }
+    } else {
+        this->asmcode.mov(asmRegister::eax, "0");
+    }
+    this->asmcode.generateUnaryInstructor(ASM_JUMP, endLabel);
+}
+
+void AsmGenerate::generateParam(QuadItem q) {
+    Symbol* val = q.result.var;
+    std::string name = val->getIDName();
+    if (name[0] == 't') {
+        asmRegister reg = this->findRegister(name);
+        this->asmcode.push(reg);
+        this->releaseRegister(reg);
+    } else if (isNumStr(name)) {
+        this->asmcode.push(name);
+    } else {
+        this->asmcode.push(DOUBLE_WORD + this->asmcode.generateVar(val->getSymOffset()));
+    }
+}
+
+void AsmGenerate::generateCall(QuadItem q) {
+    std::string fname = q.getArg(1).var->getIDName();
+    int n = q.result.target;
+    std::string label = (fname == "main") ? "main" : ("label_" + fname);
+    this->asmcode.addCode("call " + label);
+    if (n > 0) {
+        this->asmcode.add(asmRegister::esp, std::to_string(n * 4));  // cdecl：调用者清栈
+    }
+}
+
+void AsmGenerate::generateScan(QuadItem q) {
+    Symbol* var = q.result.var;
+    std::string name = var->getIDName();
+    this->asmcode.addCode("call read_int_i");
+    if (name[0] == 't') {
+        asmRegister reg = this->getRegister(name);
+        this->asmcode.mov(reg, asmRegister::eax);
+    } else {
+        this->asmcode.mov(this->asmcode.generateVar(var->getSymOffset()), asmRegister::eax);
+    }
 }
 
 
@@ -990,7 +1205,8 @@ void AsmGenerate::generate()
     // Set header info
     std::cout<<"begin _asm\n";
     std::cout<<"size="<<quad_list.size()<<"\n";
-    this->asmcode.addCode("section .text\nglobal main\nmain:\npush ebx\nmov ebp,esp\nsub esp," + std::to_string(currentTable->getOffset()) + "\n");
+    // 函数入口统一由 FUNC_LABEL 生成（阶段5），这里只输出段与全局符号声明
+    this->asmcode.addCode("section .text\nglobal main\n");
     for (size_t i = 0; i < this->quad_list.size(); i++) 
     {
         QuadItem *q = quad_list[i];
@@ -1029,6 +1245,19 @@ void AsmGenerate::generate()
         else if (optype==OpType::PRINT){
             this->generateprint(*q);
         }
+        else if (optype==OpType::FUNC_LABEL) {
+            this->generateFuncLabel(*q);
+        } else if (optype==OpType::FUNC_END) {
+            this->generateFuncEnd(*q);
+        } else if (optype==OpType::RETURN_OP) {
+            this->generateReturn(*q);
+        } else if (optype==OpType::PARAM) {
+            this->generateParam(*q);
+        } else if (optype==OpType::CALL) {
+            this->generateCall(*q);
+        } else if (optype==OpType::SCAN) {
+            this->generateScan(*q);
+        }
             /* else if (optype==OpType::GET_ADDRESS) {
             this->generateGetAddress(q);
         }else if (optype==OpType::ASSIGN_ARRAY || optype==OpType::ASSIGN_POINTER) {
@@ -1037,8 +1266,7 @@ void AsmGenerate::generate()
             this->generateGetArrayValue(q);
         }*/
     }
-    //end
-    this->asmcode.addCode("mov eax,0\nmov esp,ebp\npop ebx\nret\n");
+    //end：main 函数出口由 FUNC_END(main) 统一生成（阶段5）
     //write to asm
     
     std::ofstream out("asm/test.asm");

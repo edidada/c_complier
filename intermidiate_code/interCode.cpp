@@ -741,6 +741,18 @@ void QuadItem:: printItemInfor(int i)
         <<", "
         <<this->result.target<<std::endl;
     break;
+    case FUNC_LABEL:
+        std::cout<<"L"<<i<<":  "
+        <<"FUNC_LABEL "
+        <<this->arg1.var->getIDName()
+        <<", "
+        <<this->result.target<<std::endl;
+    break;
+    case FUNC_END:
+        std::cout<<"L"<<i<<":  "
+        <<"FUNC_END "
+        <<this->result.var->getIDName()<<std::endl;
+    break;
     
     default:
     //    std::cout<<"\033[31m Error! No such quad! \033[0m"<<std::endl;
@@ -850,10 +862,36 @@ void InterCode:: Generate(AbstractAstNode* node, SymbolTable* symbol_table) {
         break;
         case static_cast<int>(AstNodeType::BODY):
                 {
-                    if(node->getParent()->getFirstChild()->getNextSibling()->getFirstChild()->content == "main"){
-                        // 进入了main 函数的body：
+                    // 每个函数统一生成 FUNC_LABEL + 函数体 + FUNC_END（阶段5）
+                    AbstractAstNode* funcNode = node->getParent();
+                    std::string fname = funcNode->getFirstChild()->getNextSibling()->getFirstChild()->content;
+                    Symbol* funcSym = new Symbol(fname, SymbolType::var, 0);
+                    if(fname == "main"){
+                        // main 表挂 rootTable 子链（AsmGenerate 取 firstChildTable）
                         SymbolTable* main_symbol_table = symbol_table->addChildTable(false);
+                        QuadItem* begin = new QuadItem(0, OpType::FUNC_LABEL, funcSym, 0);
+                        quad_list.push_back(begin);
                         Body_Generate(node, main_symbol_table);
+                        begin->result.target = main_symbol_table->getOffset();
+                        QuadItem* end = new QuadItem(funcSym, OpType::FUNC_END);
+                        quad_list.push_back(end);
+                    }
+                    else{
+                        // 非 main 函数：独立函数体表（不挂 rootTable 子链），形参负偏移 [ebp+8] 起
+                        SymbolTable* func_table = new SymbolTable(false);
+                        func_table->setParentTable(symbol_table);
+                        AbstractAstNode* fp = funcNode->getFirstChild()->getNextSibling();
+                        if(fp->content == "Func_Params"){
+                            AbstractAstNode* vl = fp->getFirstChild()->getNextSibling();
+                            int idx = 0;
+                            GenParams(vl, func_table, idx);
+                        }
+                        QuadItem* begin = new QuadItem(0, OpType::FUNC_LABEL, funcSym, 0);
+                        quad_list.push_back(begin);
+                        Body_Generate(node, func_table);
+                        begin->result.target = func_table->getOffset();
+                        QuadItem* end = new QuadItem(funcSym, OpType::FUNC_END);
+                        quad_list.push_back(end);
                     }
                 }
         break;
@@ -938,10 +976,8 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
                 // 进行类型检查；type的值是枚举类型symbolType决定的；
                 int re_symbol_type = static_cast<int>(re->getSymbolType());
                 int arg1_symbol_type = static_cast<int>(arg1->getSymbolType());
-                if(re_symbol_type == 4 && arg1_symbol_type == 4){
-                    std::cout<<arg1->getIDName()<<" offset "<<arg1->getSymOffset()<<std::endl;
-                    re->setSymOffset(arg1->getSymOffset());
-                }
+                // 阶段5修复：删除原 setSymOffset 传播（p:=&a 时会把 p 的偏移改写为
+                // a 的偏移，导致指针与目标变量共享栈槽、相互覆盖；指针声明已分配独立栈槽）
                 if(arg1_symbol_type== 2 && re_symbol_type == 5 || 
                     arg1_symbol_type== 2 && re_symbol_type == 4)
                 {
@@ -1127,29 +1163,51 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
             if(node_content == "Call_Args_Func"){
                 AbstractAstNode* child = node->getFirstChild();
                 if(child->content == "print_int"){
-                    std::string var_name = child->getNextSibling()->getFirstChild()->getFirstChild()->getFirstChild()->content;
-                    Symbol* var = symbol_table->findSymbolLocally(var_name);
-                    if(var == NULL){
-                        var = symbol_table->findSymbolGlobally(var_name);
+                    // 实参可为任意表达式（变量/数组访问/数字），统一求值后打印（阶段5增强）
+                    AbstractAstNode* argNode = child->getNextSibling();
+                    Symbol* argVal = NULL;
+                    if(argNode != NULL && argNode->content == "Func_Single_Arg"){
+                        argVal = Exp_Stmt_Generate(argNode->getFirstChild(), symbol_table);
                     }
-                    if(var == NULL){
-                        std::cout<<"\033[31m Error: Undefined variable in print_int: \033[0m"<<var_name<<std::endl;
+                    if(argVal == NULL && argNode != NULL){
+                        AbstractAstNode* id = argNode->getFirstChild()->getFirstChild()->getFirstChild();
+                        if(id != NULL){
+                            argVal = symbol_table->findSymbolLocally(id->content);
+                            if(argVal == NULL){
+                                argVal = symbol_table->findSymbolGlobally(id->content);
+                            }
+                        }
+                    }
+                    if(argVal == NULL){
+                        std::cout<<"\033[31m Error: Undefined variable in print_int \033[0m"<<std::endl;
                     }
                     else
                     {
-                        QuadItem* quad = new QuadItem(var, OpType::PRINT);
+                        QuadItem* quad = new QuadItem(argVal, OpType::PRINT);
                         this->quad_list.push_back(quad);
                     }
                 }
                 else{
-                    // 通用函数调用：依次生成 PARAM 实参，再生成 CALL f, n（阶段4新增）
+                    // 通用函数调用：cdecl 实参逆序压栈（PARAM），再生成 CALL f, n（阶段4/5）
                     std::string fname = child->content;
                     Symbol* func_sym = new Symbol(fname, SymbolType::var, 0);
-                    int param_count = 0;
+                    std::vector<Symbol*> args;
                     AbstractAstNode* argNode = child->getNextSibling();
-                    GenCallArgs(argNode, symbol_table, param_count);
-                    QuadItem* call_quad = new QuadItem(param_count, OpType::CALL, func_sym, 0);
+                    GenCallArgs(argNode, symbol_table, args);
+                    for(int i = (int)args.size() - 1; i >= 0; --i){
+                        QuadItem* p = new QuadItem(args[i], OpType::PARAM);
+                        this->quad_list.push_back(p);
+                    }
+                    QuadItem* call_quad = new QuadItem((int)args.size(), OpType::CALL, func_sym, 0);
                     this->quad_list.push_back(call_quad);
+                    // 返回值约定：函数返回值在 eax；CALL 后立即存入新临时变量
+                    // （eax 别名仅用于这条紧邻的赋值，避免返回值直接参与后续算术）
+                    Symbol* eax_alias = new Symbol("eax", SymbolType::var, 0);
+                    Symbol* retTemp = new Symbol("t" + std::to_string(temp_list.size()), SymbolType::temp_var, 4);
+                    temp_list.push_back(retTemp);
+                    QuadItem* save = new QuadItem(retTemp, OpType::assign, eax_alias);
+                    this->quad_list.push_back(save);
+                    return retTemp;
                 }
             }
         }
@@ -1180,23 +1238,60 @@ Symbol* InterCode:: Exp_Stmt_Generate(AbstractAstNode* node, SymbolTable* symbol
     return nullptr;
 }
 
-// 递归展开实参链（Func_Single_Arg / Func_Some_Args），按源顺序生成 PARAM 指令（阶段4新增）
-void InterCode:: GenCallArgs(AbstractAstNode* node, SymbolTable* symbol_table, int& count){
+// 递归展开实参链（Func_Single_Arg / Func_Some_Args），按源顺序求值收集到 args
+void InterCode:: GenCallArgs(AbstractAstNode* node, SymbolTable* symbol_table, std::vector<Symbol*>& args){
     if(node == NULL) return;
     if(node->content == "Func_Single_Arg"){
         Symbol* param = Exp_Stmt_Generate(node->getFirstChild(), symbol_table);
         if(param != NULL){
-            QuadItem* quad = new QuadItem(param, OpType::PARAM);
-            this->quad_list.push_back(quad);
-            count++;
+            args.push_back(param);
         }
     }
     else if(node->content == "Func_Some_Args"){
         AbstractAstNode* inner = node->getFirstChild();                     // 内层 Args 链
-        GenCallArgs(inner, symbol_table, count);                            // 先内层（源顺序）
+        GenCallArgs(inner, symbol_table, args);                             // 先内层（源顺序）
         AbstractAstNode* tail = inner ? inner->getNextSibling() : NULL;     // 尾部实参
         if(tail != NULL){
-            GenCallArgs(tail, symbol_table, count);
+            if(tail->content == "Func_Single_Arg" || tail->content == "Func_Some_Args"){
+                GenCallArgs(tail, symbol_table, args);
+            } else {
+                // 尾部实参是裸表达式（文法：Args COMMA Exp），直接求值入参（阶段5修复多实参丢失）
+                Symbol* param = Exp_Stmt_Generate(tail, symbol_table);
+                if(param != NULL){
+                    args.push_back(param);
+                }
+            }
+        }
+    }
+}
+
+// 递归展开形参链（Single_Param / Some_Param），按 cdecl 约定以负偏移（[ebp+8], [ebp+12]...）入函数体表
+void InterCode:: GenParams(AbstractAstNode* node, SymbolTable* table, int& idx){
+    if(node == NULL) return;
+    if(node->content == "Single_Param"){
+        AbstractAstNode* param = node->getFirstChild();                     // Param_ID / array_*id 等
+        AbstractAstNode* desc = param->getFirstChild();
+        AbstractAstNode* id = desc ? desc->getNextSibling() : NULL;
+        if(id != NULL && id->nodeType == AstNodeType::ID){
+            Symbol* s = new Symbol(id->content, SymbolType::var, 4);
+            s->setSymOffset(-(8 + 4 * idx));
+            table->addSymbol(s);
+            idx++;
+        }
+    }
+    else if(node->content == "Some_Param"){
+        AbstractAstNode* sub = node->getFirstChild();                       // 内层 VarList
+        GenParams(sub, table, idx);
+        AbstractAstNode* last = sub ? sub->getNextSibling() : NULL;         // 尾部 Param
+        if(last != NULL){
+            AbstractAstNode* desc = last->getFirstChild();
+            AbstractAstNode* id = desc ? desc->getNextSibling() : NULL;
+            if(id != NULL && id->nodeType == AstNodeType::ID){
+                Symbol* s = new Symbol(id->content, SymbolType::var, 4);
+                s->setSymOffset(-(8 + 4 * idx));
+                table->addSymbol(s);
+                idx++;
+            }
         }
     }
 }
@@ -1447,9 +1542,11 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
                         }
                         else
                         {
-                            Symbol* var = new Symbol(var_name, SymbolType::pointer);
+                            Symbol* var = new Symbol(var_name, SymbolType::pointer, 4);
                             Symbol* addr_var = Exp_Stmt_Generate( child->getFirstChild()->getNextSibling(),symbol_table);
-                            var->setSymOffset(addr_var->getSymOffset());
+                            // 阶段5修复：指针与普通变量一致分配独立栈槽，避免与目标变量共享偏移
+                            symbol_table->setOffset(symbol_table->getOffset()+var->getWidth());
+                            var->setSymOffset(symbol_table->getOffset());
                             symbol_table->addSymbol(var);
                             QuadItem* quad = new QuadItem(var, assign, addr_var);
                             quad_list.push_back(quad);
@@ -1478,8 +1575,10 @@ SymbolTable* InterCode:: Body_Generate(AbstractAstNode* node, SymbolTable* symbo
                     else if(child->getFirstChild()->content == "array_*id"){
                         std::string pointer_name = child->getFirstChild()->getFirstChild()->content;
                         Symbol* pointer_var = new Symbol(pointer_name, SymbolType::pointer, 4);
-                        pointer_var->setSymOffset(-1); // 偏移量为-1的指针是野指针；
-                        // 指针加入符号表，但是不会影响符号表的总偏移量；
+                        // 阶段5修复：指针与普通变量一致分配独立栈槽（原设计偏移恒为 -1 且
+                        // 不占 total_offset，导致指针与相邻变量偏移冲突、相互覆盖）
+                        symbol_table->setOffset(symbol_table->getOffset()+pointer_var->getWidth());
+                        pointer_var->setSymOffset(symbol_table->getOffset());
                         symbol_table->addSymbol(pointer_var); 
                     }
                     else if(child->getFirstChild()->content == "Block_Single_Vardef"){

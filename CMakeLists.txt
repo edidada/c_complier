@@ -247,3 +247,9 @@ add_test(NAME intercode_suite COMMAND bash
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_intercode_test.sh
         $<TARGET_FILE:scanner_parser_test>
         ${CMAKE_CURRENT_SOURCE_DIR}/test_intercode)
+
+# ==================== CTest 汇编生成测试 (T5) ====================
+add_test(NAME asm_suite COMMAND bash
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asm_test.sh
+        $<TARGET_FILE:scanner_parser_test>
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_asm)
